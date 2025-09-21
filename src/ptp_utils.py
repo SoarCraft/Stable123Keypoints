@@ -16,7 +16,7 @@ import torch.distributions as dist
 import numpy as np
 import torch
 from typing import Optional
-from tqdm.notebook import tqdm
+from tqdm import tqdm
 import torch.nn.functional as F
 import abc
 from src.eval import find_max_pixel, find_k_max_pixels
@@ -340,7 +340,7 @@ def register_attention_control_generation(model, controller, target_attn_maps, i
         controller = DummyController()
 
     def register_recr(net_, count, place_in_unet):
-        if net_.__class__.__name__ == "CrossAttention":
+        if net_.__class__.__name__ == "Attention":
             net_.forward = ca_forward(net_, place_in_unet)
             return count + 1
         elif hasattr(net_, "children"):
@@ -487,7 +487,7 @@ def register_attention_control(model, controller, feature_upsample_res=256):
         controller = DummyController()
 
     def register_recr(net_, count, place_in_unet):
-        if net_.__class__.__name__ == "CrossAttention":
+        if net_.__class__.__name__ == "Attention":
             net_.forward = ca_forward(net_, place_in_unet)
             return count + 1
         elif hasattr(net_, "children"):
@@ -503,8 +503,7 @@ def register_attention_control(model, controller, feature_upsample_res=256):
 
     controller.num_att_layers = cross_att_count
     
-    # create assertion with message
-    assert cross_att_count != 0, "No cross attention layers found in the model. Please check to make sure you're using diffusers==0.8.0."
+    assert cross_att_count != 0, f"No attention layers found in the model. Please check the model structure. Found {cross_att_count} attention layers."
 
 
 def init_random_noise(device, num_words=77):

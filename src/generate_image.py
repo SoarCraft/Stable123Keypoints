@@ -18,7 +18,7 @@ scheduler.set_timesteps(NUM_DDIM_STEPS)
 
 for i in range(100):
     model = StableDiffusionPipeline.from_pretrained(
-        "runwayml/stable-diffusion-v1-5", use_auth_token=MY_TOKEN, scheduler=scheduler
+        "sd-legacy/stable-diffusion-v1-5", use_auth_token=MY_TOKEN, scheduler=scheduler
     ).to(device)
 
     controller = ptp_utils.AttentionStore()

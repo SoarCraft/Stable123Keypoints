@@ -18,7 +18,7 @@ from src import ptp_utils
 import torch.nn as nn
 
 
-def load_ldm(device, type="CompVis/stable-diffusion-v1-4", feature_upsample_res=256, my_token=None):
+def load_ldm(device, type="sd-legacy/stable-diffusion-v1-5", feature_upsample_res=256, my_token=None):
     scheduler = DDIMScheduler(
         beta_start=0.00085,
         beta_end=0.012,
@@ -31,7 +31,7 @@ def load_ldm(device, type="CompVis/stable-diffusion-v1-4", feature_upsample_res=
     scheduler.set_timesteps(NUM_DDIM_STEPS)
 
     ldm = StableDiffusionPipeline.from_pretrained(
-        type, use_auth_token=my_token, scheduler=scheduler
+        type, token=my_token, scheduler=scheduler
     ).to(device)
     
     if device != "cpu":
