@@ -24,6 +24,7 @@ def collect_maps(
     upsample_res=512,
     layers=[0, 1, 2, 3],
     indices=None,
+    device="cuda",
 ):
     """
     returns the bilinearly upsampled attention map of size upsample_res x upsample_res for the first word in the prompt
@@ -42,6 +43,8 @@ def collect_maps(
             continue
 
         data = attention_maps[layer]
+        
+        data = data.to(device)
 
         data = data.reshape(
             data.shape[0], int(data.shape[1] ** 0.5), int(data.shape[1] ** 0.5), data.shape[2]

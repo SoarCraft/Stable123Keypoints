@@ -199,6 +199,7 @@ def run_image_with_context_augmented(
             indices=indices.cpu(),
         )
         
+        attn_maps = [attn_map.to(device) for attn_map in attn_maps]
         attn_maps = torch.stack(attn_maps)
         
         _num_samples = invertible_transform.inverse(torch.ones_like(attn_maps))

@@ -237,6 +237,7 @@ def run_and_find_attn(
             upsample_res=upsample_res,
             layers=layers,
             indices=indices,
+            device=device,
         )
         
         attention_maps.append(_attention_maps)
