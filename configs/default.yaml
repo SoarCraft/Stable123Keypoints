@@ -1,0 +1,66 @@
+# 默认配置文件
+# StableImageKeypoints 训练配置
+
+# 模型相关配置
+model:
+  type: "sd-legacy/stable-diffusion-v1-5" # LDM模型类型
+  my_token: null # Hugging Face token（必须在使用时提供）
+
+# 数据集相关配置
+dataset:
+  name: "celeba_aligned" # 数据集名称
+  location: "~" # 数据集路径
+  max_len: -1 # 数据集最大长度，-1表示无限制
+  validation: false # 是否使用验证集
+
+# 训练相关配置
+training:
+  device: "cuda:0" # 使用的设备
+  lr: 0.005 # 学习率
+  num_steps: 500 # 优化步数
+  num_tokens: 500 # token数量
+  batch_size: 4 # 批处理大小
+
+# 特征相关配置
+features:
+  upsample_res: 128 # 注意力操作中获取的潜在特征的上采样分辨率
+  layers: [0, 1, 2, 3] # 使用的层
+  noise_level: -1 # 噪声级别（0-49，0最高噪声，49最低噪声）
+
+# 关键点相关配置
+keypoints:
+  top_k: 10 # 选择的点数
+  top_k_strategy: "gaussian" # 选择top k tokens的策略
+  max_loc_strategy: "argmax" # 选择注意力图中最大位置的策略
+  min_dist: 0.1 # 关键点之间的最小距离（作为图像大小的分数）
+  max_num_points: 50000 # 预计算的样本数
+  num_indices: 100 # 寻找最佳token索引时使用的样本数
+  num_subjects: 1 # 每张图像中的主体数量
+  sigma: 2.0 # 高斯核的sigma值
+
+# 损失函数权重
+loss:
+  sharpening_weight: 100.0 # 锐化损失权重
+  equivariance_attn_weight: 1000.0 # 等变注意力损失权重
+
+# 数据增强配置
+augmentation:
+  degrees: 15.0 # 旋转角度
+  scale: [0.8, 1.0] # 缩放因子
+  translate: [0.25, 0.25] # 沿x和y轴的平移量
+  iterations: 10 # 增强迭代次数
+
+# 评估相关配置
+evaluation:
+  method: "inter_eye_distance" # 评估方法
+  furthest_point_num_samples: 25 # 使用最远点策略时的样本数
+
+# 可视化和日志配置
+visualization:
+  visualize: false # 是否可视化注意力图
+  save_folder: "outputs" # 保存可视化和检查点的位置
+
+# Weights & Biases配置
+wandb:
+  enabled: false # 是否启用wandb日志
+  name: "temp" # wandb运行名称
