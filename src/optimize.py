@@ -306,7 +306,7 @@ def optimize_embedding(
             optimizer.step()
             optimizer.zero_grad()
 
-            if config.wandb:
+            if config.wandb_enabled:
                 wandb.log(
                     {
                         "loss": running_total_loss.item(),

@@ -202,7 +202,7 @@ def find_pred_noise(
 
     pred_noise = ldm.unet(noisy_image, 
                           ldm.scheduler.timesteps[noise_level].repeat(noisy_image.shape[0]), 
-                          context.repeat(noisy_image.shape[0], 1, 1))["sample"]
+                          encoder_hidden_states=context.repeat(noisy_image.shape[0], 1, 1))["sample"]
     
     return noise, pred_noise
     
@@ -296,27 +296,27 @@ def register_attention_control(model, controller, feature_upsample_res=256):
         else:
             to_out = self.to_out
 
-        def forward(x, context=None, mask=None):
-            batch_size, sequence_length, dim = x.shape
+        def forward(hidden_states, encoder_hidden_states=None, attention_mask=None, **kwargs):
+            batch_size, sequence_length, dim = hidden_states.shape
             h = self.heads
-            q = self.to_q(x)
-            is_cross = context is not None
+            q = self.to_q(hidden_states)
+            is_cross = encoder_hidden_states is not None
 
-            context = context if is_cross else x
-            k = self.to_k(context)
-            v = self.to_v(context)
-            q = self.reshape_heads_to_batch_dim(q)
-            k = self.reshape_heads_to_batch_dim(k)
-            v = self.reshape_heads_to_batch_dim(v)
+            encoder_hidden_states = encoder_hidden_states if is_cross else hidden_states
+            k = self.to_k(encoder_hidden_states)
+            v = self.to_v(encoder_hidden_states)
+            q = self.head_to_batch_dim(q)
+            k = self.head_to_batch_dim(k)
+            v = self.head_to_batch_dim(v)
 
             sim = torch.einsum("b i d, b j d -> b i j", q, k) * self.scale
             # sim = torch.matmul(q, k.permute(0, 2, 1)) * self.scale
 
-            if mask is not None:
-                mask = mask.reshape(batch_size, -1)
+            if attention_mask is not None:
+                attention_mask = attention_mask.reshape(batch_size, -1)
                 max_neg_value = -torch.finfo(sim.dtype).max
-                mask = mask[:, None, :].repeat(h, 1, 1)
-                sim = sim.masked_fill(~mask, max_neg_value)
+                attention_mask = attention_mask[:, None, :].repeat(h, 1, 1)
+                sim = sim.masked_fill(~attention_mask, max_neg_value)
 
             # attention, what we cannot get enough of
             attn = torch.nn.Softmax(dim=-1)(sim)
@@ -329,7 +329,7 @@ def register_attention_control(model, controller, feature_upsample_res=256):
                 and sequence_length <= 32**2
                 and len(controller.step_store["attn"]) < 4
             ):
-                x_reshaped = x.reshape(
+                x_reshaped = hidden_states.reshape(
                     batch_size,
                     int(sequence_length**0.5),
                     int(sequence_length**0.5),
@@ -348,7 +348,7 @@ def register_attention_control(model, controller, feature_upsample_res=256):
                 )
 
                 q = self.to_q(x_reshaped)
-                q = self.reshape_heads_to_batch_dim(q)
+                q = self.head_to_batch_dim(q)
 
                 sim = torch.einsum("b i d, b j d -> b i j", q, k) * self.scale
                 attn = torch.nn.Softmax(dim=-1)(sim)
@@ -356,7 +356,7 @@ def register_attention_control(model, controller, feature_upsample_res=256):
 
                 attn = controller({"attn": attn}, is_cross, place_in_unet)
 
-            out = self.reshape_batch_dim_to_heads(out)
+            out = self.batch_to_head_dim(out)
             return to_out(out)
 
         return forward

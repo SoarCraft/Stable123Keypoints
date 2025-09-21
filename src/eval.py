@@ -451,7 +451,7 @@ def evaluate(
             print()
         # Extract the 10 worst distances (and their indices) from the priority queue
 
-    if config.wandb:
+    if config.wandb_enabled:
         wandb.log({"mean_distance": torch.mean(torch.stack(distances))})
     print()
 
