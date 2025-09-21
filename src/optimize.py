@@ -1,8 +1,8 @@
 # load the dataset
 import torch
 from tqdm import tqdm
-from unsupervised_keypoints import ptp_utils
-from unsupervised_keypoints import eval
+from src import ptp_utils
+from src import eval
 import torch.nn.functional as F
 from datasets.celeba import CelebA
 from datasets import custom_images
@@ -12,10 +12,10 @@ from datasets import taichi
 from datasets import human36m
 from datasets import unaligned_human36m
 from datasets import deepfashion
-from unsupervised_keypoints import optimize_token
+from src import optimize_token
 import wandb
-from unsupervised_keypoints.invertable_transform import RandomAffineWithInverse
-from unsupervised_keypoints.config_utils import Config
+from src.invertable_transform import RandomAffineWithInverse
+from src.config_utils import Config
 
 
 def collect_maps(

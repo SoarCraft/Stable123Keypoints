@@ -19,10 +19,10 @@ from typing import Optional
 from tqdm.notebook import tqdm
 import torch.nn.functional as F
 import abc
-from unsupervised_keypoints.eval import find_max_pixel, find_k_max_pixels
-from unsupervised_keypoints import optimize_token
+from src.eval import find_max_pixel, find_k_max_pixels
+from src import optimize_token
 from PIL import Image
-from unsupervised_keypoints.optimize import collect_maps
+from src.optimize import collect_maps
 
 
 class AttentionControl(abc.ABC):

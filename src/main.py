@@ -3,11 +3,11 @@ import wandb
 import numpy as np
 import torch
 import numpy as np
-from unsupervised_keypoints.optimize_token import load_ldm
-from unsupervised_keypoints.optimize import optimize_embedding
-from unsupervised_keypoints.config_utils import setup_config
+from src.optimize_token import load_ldm
+from src.optimize import optimize_embedding
+from src.config_utils import setup_config
 
-from unsupervised_keypoints.keypoint_regressor import (
+from src.keypoint_regressor import (
     find_best_indices,
     precompute_all_keypoints,
     return_regressor,
@@ -15,8 +15,8 @@ from unsupervised_keypoints.keypoint_regressor import (
     return_regressor_human36m,
 )
 
-from unsupervised_keypoints.eval import evaluate
-from unsupervised_keypoints.visualize import visualize_attn_maps
+from src.eval import evaluate
+from src.visualize import visualize_attn_maps
 
 
 # 配置管理 - 使用强类型配置类

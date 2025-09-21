@@ -8,8 +8,7 @@ For more detailed information, visit our [project page](https://stablekeypoints.
 
 ## Interactive Demo
 
-We provide an interactive demo in a [Google Colab](https://colab.research.google.com/drive/1ULz-HIR9LgzXL5Lr68Cn_HV4Fn6tMlBj?usp=sharing). This allows a user to upload custom images and optimizes and visualizes the found keypoints over the images. 
-
+We provide an interactive demo in a [Google Colab](https://colab.research.google.com/drive/1ULz-HIR9LgzXL5Lr68Cn_HV4Fn6tMlBj?usp=sharing). This allows a user to upload custom images and optimizes and visualizes the found keypoints over the images.
 
 ## Requirements
 
@@ -24,7 +23,8 @@ conda activate StableKeypoints
 
 ### Hugging Face Token
 
-To download the pre-trained models from Hugging Face, you need a read-access token. 
+To download the pre-trained models from Hugging Face, you need a read-access token.
+
 1. Create an account on [Hugging Face](https://huggingface.co/) if you don't have one.
 2. Go to your [account settings](https://huggingface.co/settings/tokens) and create a new token with "read" permissions.
 3. When running the script, provide this token using the `--my_token YOUR_TOKEN_HERE` command-line argument.
@@ -40,7 +40,7 @@ Preprocessed data for CelebA, and CUB can be found in [Autolink's repository](ht
 To use the code, run:
 
 ```bash
-python3 -m unsupervised_keypoints.main [arguments]
+python3 -m src.main [arguments]
 ```
 
 ### Main Arguments
@@ -59,13 +59,13 @@ python3 -m unsupervised_keypoints.main [arguments]
 ## Example Usage
 
 ```bash
-python3 -m unsupervised_keypoints.main --dataset_loc /path/to/dataset --dataset_name celeba_wild --evaluation_method inter_eye_distance --save_folder /path/to/save
+python3 -m src.main --dataset_loc /path/to/dataset --dataset_name celeba_wild --evaluation_method inter_eye_distance --save_folder /path/to/save
 ```
 
-If you want to use a custom dataset you can run 
+If you want to use a custom dataset you can run
 
 ```bash
-python3 -m unsupervised_keypoints.main --dataset_loc /path/to/dataset --dataset_name custom
+python3 -m src.main --dataset_loc /path/to/dataset --dataset_name custom
 ```
 
 ## Precomputed tokens

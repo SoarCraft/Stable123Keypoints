@@ -1,4 +1,4 @@
-from unsupervised_keypoints.config_utils import Config
+from src.config_utils import Config
 import os
 import torch
 from tqdm import tqdm
@@ -10,8 +10,8 @@ from datasets import taichi
 from datasets import human36m
 from datasets import unaligned_human36m
 from datasets import deepfashion
-from unsupervised_keypoints.eval import run_image_with_context_augmented
-from unsupervised_keypoints.eval import pixel_from_weighted_avg, find_max_pixel
+from src.eval import run_image_with_context_augmented
+from src.eval import pixel_from_weighted_avg, find_max_pixel
 import matplotlib.pyplot as plt
 
 
@@ -203,7 +203,7 @@ def visualize_attn_maps(
     points = points.reshape(height * width, config.top_k, 2)
 
     plot_point_correspondences(
-        imgs, points.cpu(), os.path.join(config.save_folder, "unsupervised_keypoints.pdf"), height, width
+        imgs, points.cpu(), os.path.join(config.save_folder, "src.pdf"), height, width
     )
 
     for i in range(config.top_k):

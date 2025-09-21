@@ -14,7 +14,7 @@
 
 import torch
 from diffusers import StableDiffusionPipeline, DDIMScheduler
-from unsupervised_keypoints import ptp_utils
+from src import ptp_utils
 import torch.nn as nn
 
 

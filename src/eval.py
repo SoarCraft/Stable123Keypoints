@@ -2,7 +2,7 @@
 import os
 import torch
 import torch.nn.functional as F
-from unsupervised_keypoints import ptp_utils
+from src import ptp_utils
 from datasets.celeba import CelebA
 from datasets import cub
 from datasets import cub_parts
@@ -10,8 +10,8 @@ from datasets import taichi
 from datasets import human36m
 from datasets import unaligned_human36m
 from datasets import deepfashion
-from unsupervised_keypoints.config_utils import Config
-from unsupervised_keypoints.invertable_transform import (
+from src.config_utils import Config
+from src.invertable_transform import (
     RandomAffineWithInverse,
 )
 import wandb

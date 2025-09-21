@@ -239,6 +239,7 @@ def compute_dt_barrier(mask, k=50):
     dist = 1. / (1 + np.exp(k * -dist_diff))
     return dist
 
+
 class CUBDataset(Dataset):
     def __init__(self, img_size=512, split='train', unsup_mask= False, dataset_root= "~", single_class=None):
         super().__init__()
