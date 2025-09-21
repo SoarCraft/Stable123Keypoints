@@ -25,6 +25,7 @@ def load_ldm(device, type="sd-legacy/stable-diffusion-v1-5", feature_upsample_re
         beta_schedule="scaled_linear",
         clip_sample=False,
         set_alpha_to_one=False,
+        steps_offset=1
     )
 
     NUM_DDIM_STEPS = 50
