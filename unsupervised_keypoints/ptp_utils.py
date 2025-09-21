@@ -15,17 +15,13 @@
 import torch.distributions as dist
 import numpy as np
 import torch
-from typing import Optional, Union, Tuple, List, Dict
+from typing import Optional
 from tqdm.notebook import tqdm
 import torch.nn.functional as F
 import abc
 from unsupervised_keypoints.eval import find_max_pixel, find_k_max_pixels
 from unsupervised_keypoints import optimize_token
-from torch.nn.parallel.data_parallel import DataParallel
-from collections import OrderedDict
-
 from PIL import Image
-
 from unsupervised_keypoints.optimize import collect_maps
 
 
@@ -159,9 +155,6 @@ def furthest_point_sampling(attention_maps, top_k, top_initial_candidates):
     return torch.tensor(selected_indices).to(device)
 
 
-
-
-
 def entropy_sort(attention_maps, top_k, min_dist=0.05):
     """
     attention_maps is of shape [batch_size, image_h, image_w]
@@ -186,21 +179,6 @@ def entropy_sort(attention_maps, top_k, min_dist=0.05):
     
     return entropy_argsort[:top_k]
 
-
-def random_range(size, min_val, max_val, dtype=torch.float32):
-    """
-    Generate a random tensor of shape `size` with values in the range `[min_val, max_val]`.
-
-    Parameters:
-    - size (tuple): The shape of the output tensor.
-    - min_val (float): The minimum value in the range.
-    - max_val (float): The maximum value in the range.
-    - dtype (torch.dtype, optional): The desired data type of the output tensor. Default is torch.float32.
-
-    Returns:
-    - torch.Tensor: A tensor of random numbers in the range `[min_val, max_val]`.
-    """
-    return torch.rand(size, dtype=dtype) * (max_val - min_val) + min_val
 
 def find_pred_noise(
     ldm,
@@ -272,20 +250,6 @@ def run_and_find_attn(
     return attention_maps
 
 
-def mask_attn(image, attn_map):
-    C, H, W = attn_map.shape
-    # if  image is numpy array, convert to torch tensor
-    if type(image) is np.ndarray:
-        image = torch.from_numpy(image).permute(0, 3, 1, 2).to(attn_map.device)
-
-    downsampled_img = F.interpolate(image, size=(H, W), mode="bilinear", align_corners=False)
-    downsampled_img = downsampled_img.mean(dim=1).to(attn_map.device)
-    # mask attn_maps where downsampled_img is 0
-    attn_map = attn_map*(downsampled_img!=0)
-        
-    return attn_map
-
-
 def image2latent(model, image, device):
     with torch.no_grad():
         if type(image) is Image:
@@ -302,15 +266,6 @@ def image2latent(model, image, device):
                 latents = model.vae.encode(image)["latent_dist"].mean
             latents = latents * 0.18215
     return latents
-    
-
-def diffusion_step(
-    model, latents, context, t
-):
-    
-    noise_pred = model.unet(latents, t.repeat(latents.shape[0]), context.repeat(latents.shape[0], 1, 1))["sample"]
-    
-    return noise_pred
 
 
 def latent2image(vae, latents):
@@ -320,18 +275,6 @@ def latent2image(vae, latents):
     image = image.cpu().permute(0, 2, 3, 1).numpy()
     image = (image * 255).astype(np.uint8)
     return image
-
-
-def init_latent(latent, model, height, width, generator):
-    if latent is None:
-        latent = torch.randn(
-            (1, model.unet.in_channels, height // 8, width // 8),
-            generator=generator,
-        )
-    latents = latent.expand(
-        1, model.unet.in_channels, height // 8, width // 8
-    ).to(model.device)
-    return latent, latents
 
 
 def latent_step(model, controller, latents, context, t, guidance_scale, low_resource=True):
@@ -347,6 +290,7 @@ def latent_step(model, controller, latents, context, t, guidance_scale, low_reso
     latents = model.scheduler.step(noise_pred, t, latents)["prev_sample"]
     latents = controller.step_callback(latents)
     return latents
+
 
 def register_attention_control_generation(model, controller, target_attn_maps, indices):
     def ca_forward(self, place_in_unet):
@@ -438,8 +382,6 @@ def text2image_ldm_stable(
     )
     uncond_embeddings = model.text_encoder(uncond_input.input_ids.to(model.device))[0]
 
-    # latent, latents = init_latent(latent, model, height, width, generator)
-    
     latents = torch.randn(
         (1, model.unet.in_channels, height // 8, width // 8),
         generator=generator,
@@ -459,14 +401,6 @@ def text2image_ldm_stable(
     image = latent2image(model.vae, latents)
 
     return image, latent
-
-
-def softmax_torch(x):  # Assuming x has atleast 2 dimensions
-    maxes = torch.max(x, -1, keepdim=True)[0]
-    x_exp = torch.exp(x - maxes)
-    x_exp_sum = torch.sum(x_exp, -1, keepdim=True)
-    probs = x_exp / x_exp_sum
-    return probs
 
 
 def register_attention_control(model, controller, feature_upsample_res=256):
@@ -573,89 +507,5 @@ def register_attention_control(model, controller, feature_upsample_res=256):
     assert cross_att_count != 0, "No cross attention layers found in the model. Please check to make sure you're using diffusers==0.8.0."
 
 
-def get_word_inds(text: str, word_place: int, tokenizer):
-    split_text = text.split(" ")
-    if type(word_place) is str:
-        word_place = [i for i, word in enumerate(split_text) if word_place == word]
-    elif type(word_place) is int:
-        word_place = [word_place]
-    out = []
-    if len(word_place) > 0:
-        words_encode = [
-            tokenizer.decode([item]).strip("#") for item in tokenizer.encode(text)
-        ][1:-1]
-        cur_len, ptr = 0, 0
-
-        for i in range(len(words_encode)):
-            cur_len += len(words_encode[i])
-            if ptr in word_place:
-                out.append(i + 1)
-            if cur_len >= len(split_text[ptr]):
-                ptr += 1
-                cur_len = 0
-    return np.array(out)
-
-
-def update_alpha_time_word(
-    alpha,
-    bounds: Union[float, Tuple[float, float]],
-    prompt_ind: int,
-    word_inds: Optional[torch.Tensor] = None,
-):
-    if type(bounds) is float:
-        bounds = 0, bounds
-    start, end = int(bounds[0] * alpha.shape[0]), int(bounds[1] * alpha.shape[0])
-    if word_inds is None:
-        word_inds = torch.arange(alpha.shape[2])
-    alpha[:start, prompt_ind, word_inds] = 0
-    alpha[start:end, prompt_ind, word_inds] = 1
-    alpha[end:, prompt_ind, word_inds] = 0
-    return alpha
-
-
-def get_time_words_attention_alpha(
-    prompts,
-    num_steps,
-    cross_replace_steps: Union[float, Dict[str, Tuple[float, float]]],
-    tokenizer,
-    max_num_words=77,
-):
-    if type(cross_replace_steps) is not dict:
-        cross_replace_steps = {"default_": cross_replace_steps}
-    if "default_" not in cross_replace_steps:
-        cross_replace_steps["default_"] = (0.0, 1.0)
-    alpha_time_words = torch.zeros(num_steps + 1, len(prompts) - 1, max_num_words)
-    for i in range(len(prompts) - 1):
-        alpha_time_words = update_alpha_time_word(
-            alpha_time_words, cross_replace_steps["default_"], i
-        )
-    for key, item in cross_replace_steps.items():
-        if key != "default_":
-            inds = [
-                get_word_inds(prompts[i], key, tokenizer)
-                for i in range(1, len(prompts))
-            ]
-            for i, ind in enumerate(inds):
-                if len(ind) > 0:
-                    alpha_time_words = update_alpha_time_word(
-                        alpha_time_words, item, i, ind
-                    )
-    alpha_time_words = alpha_time_words.reshape(
-        num_steps + 1, len(prompts) - 1, 1, 1, max_num_words
-    )
-    return alpha_time_words
-
-
 def init_random_noise(device, num_words=77):
     return torch.randn(1, num_words, 768).to(device)
-
-
-def find_latents(ldm, image, device="cuda"):
-    # if image is a torch.tensor, convert to numpy
-    if type(image) == torch.Tensor:
-        image = image.permute(1, 2, 0).detach().cpu().numpy()
-
-    with torch.no_grad():
-        latent = image2latent(ldm, image, device)
-
-    return latent
