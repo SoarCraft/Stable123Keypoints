@@ -6,7 +6,6 @@ Copyright (c) 2023 xingzhehe
 """
 
 import os
-import h5py
 import numpy as np
 import pandas
 import torch
@@ -14,7 +13,6 @@ import torch.utils.data
 import torchvision
 from PIL import Image
 from matplotlib import colors
-from tqdm import tqdm
 from torchvision import transforms
 
 

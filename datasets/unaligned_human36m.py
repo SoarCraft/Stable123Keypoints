@@ -8,12 +8,10 @@ Copyright (c) 2023 xingzhehe
 import os
 import h5py
 import numpy as np
-import scipy.io
 import torch
 import torch.utils.data
 import torch.nn.functional as F
 from PIL import Image
-from torchvision import transforms
 from matplotlib import colors
 from torchvision.transforms import functional as TF
 
