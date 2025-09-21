@@ -1,10 +1,8 @@
 import abc
 import torch
-from torch import nn
 import torch.nn.functional as F
-    
-    
-    
+
+
 class AttentionControl(abc.ABC):
     
     def step_callback(self, x_t):
@@ -43,7 +41,6 @@ class AttentionControl(abc.ABC):
         self.num_att_layers = -1
         self.cur_att_layer = 0
 
-        
 
 class AttentionStore(AttentionControl):
 
@@ -84,8 +81,8 @@ class AttentionStore(AttentionControl):
         super(AttentionStore, self).__init__()
         self.step_store = self.get_empty_store()
         self.attention_store = {}
-        
-        
+
+
 def register_attention_control(model, controller):
     def custom_call(
         self,

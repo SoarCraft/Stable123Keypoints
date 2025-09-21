@@ -1,12 +1,9 @@
 # load the dataset
 import torch
-import numpy as np
 from tqdm import tqdm
 from unsupervised_keypoints import ptp_utils
-from unsupervised_keypoints import sdxl_monkey_patch
 from unsupervised_keypoints import eval
 import torch.nn.functional as F
-import torch.distributions as dist
 from datasets.celeba import CelebA
 from datasets import custom_images
 from datasets import cub
@@ -16,11 +13,7 @@ from datasets import human36m
 from datasets import unaligned_human36m
 from datasets import deepfashion
 from unsupervised_keypoints import optimize_token
-import torch.nn as nn
-
-# now import weights and biases
 import wandb
-
 from unsupervised_keypoints.invertable_transform import RandomAffineWithInverse
 
 
@@ -103,57 +96,6 @@ def create_gaussian_kernel(size: int, sigma: float):
     return kernel
 
 
-def gaussian_loss(attn_map, kernel_size=5, sigma=1.0, temperature=1e-4):
-    # attn_map is of shape (T, H, W)
-    T, H, W = attn_map.shape
-
-    # Softmax over flattened attn_map to get probabilities
-    attn_probs = F.softmax(attn_map.view(T, -1) / temperature, dim=1)  # Shape: (T, H*W)
-
-    # stop the gradient for attn_probs
-    attn_probs = attn_probs.detach()
-    # # divide attn_probs by the max of the first dim
-    # attn_probs = attn_probs / attn_probs.max(dim=1, keepdim=True)[0]
-    attn_probs = attn_probs.view(T, H, W)  # Reshape back to original shape
-
-    # Create Gaussian kernel
-    gaussian_kernel = create_gaussian_kernel(kernel_size, sigma).to(attn_map.device)
-    gaussian_kernel = gaussian_kernel.view(1, 1, kernel_size, kernel_size)
-
-    # Apply Gaussian smoothing
-    target = F.conv2d(
-        attn_probs.unsqueeze(1), gaussian_kernel, padding=kernel_size // 2
-    )
-    target = target.view(T, H * W)
-    target = target / target.max(dim=1, keepdim=True)[0]
-    target = target.view(T, H, W)
-    # divide attn_probs by the max of the first dim
-
-    loss = F.mse_loss(attn_map, attn_probs)
-    # loss = F.mse_loss(attn_probs, torch.zeros_like(attn_probs))
-
-    return loss
-
-
-def find_pos_from_index(attn_map):
-    T, H, W = attn_map.shape
-
-    index = attn_map.view(T, -1).argmax(dim=1)
-
-    # Convert 1D index to 2D indices
-    rows = index // W
-    cols = index % W
-
-    # Normalize to [0, 1]
-    rows_normalized = rows.float() / (H - 1)
-    cols_normalized = cols.float() / (W - 1)
-
-    # Combine into pos
-    pos = torch.stack([cols_normalized, rows_normalized], dim=1)
-
-    return pos
-
-
 def equivariance_loss(embeddings_initial, embeddings_transformed, transform, index):
     # untransform the embeddings_transformed
     embeddings_initial_prime = transform.inverse(embeddings_transformed)[index]
@@ -164,7 +106,6 @@ def equivariance_loss(embeddings_initial, embeddings_transformed, transform, ind
 
 
 def sharpening_loss(attn_map, sigma=1.0, temperature=1e1, device="cuda", num_subjects = 1):
-    
     pos = eval.find_k_max_pixels(attn_map, num=num_subjects)/attn_map.shape[-1]
 
     loss = find_gaussian_loss_at_point(
@@ -204,66 +145,6 @@ def find_gaussian_loss_at_point(
     loss = F.mse_loss(attn_map, target)
 
     return loss
-
-
-def variance_loss(heatmaps):
-    # Get the shape of the heatmaps
-    batch_size, m, n = heatmaps.shape
-
-    # Compute the total value of the heatmaps
-    total_value = torch.sum(heatmaps, dim=[1, 2], keepdim=True)
-
-    # Normalize the heatmaps
-    normalized_heatmaps = heatmaps / (
-        total_value + 1e-6
-    )  # Adding a small constant to avoid division by zero
-
-    # Create meshgrid to represent the coordinates
-    x = torch.arange(0, m).float().view(1, m, 1).to(heatmaps.device)
-    y = torch.arange(0, n).float().view(1, 1, n).to(heatmaps.device)
-
-    # Compute the weighted sum for x and y
-    x_sum = torch.sum(x * normalized_heatmaps, dim=[1, 2], keepdim=True)
-    y_sum = torch.sum(y * normalized_heatmaps, dim=[1, 2], keepdim=True)
-
-    # Compute the weighted average for x and y
-    x_avg = x_sum
-    y_avg = y_sum
-
-    # Compute the variance sum
-    variance_sum = torch.sum(
-        normalized_heatmaps * (((x - x_avg) ** 2) + ((y - y_avg) ** 2)), dim=[1, 2]
-    )
-
-    # Compute the standard deviation
-    std_dev = torch.sqrt(variance_sum)
-
-    return torch.mean(std_dev)
-
-
-def differentiable_argmax(heatmaps):
-    # Get the shape of the heatmaps
-    batch_size, m, n = heatmaps.shape
-
-    # Compute the total value of the heatmaps
-    total_value = torch.sum(heatmaps, dim=[1, 2], keepdim=True)
-
-    # Normalize the heatmaps
-    normalized_heatmaps = heatmaps / (
-        total_value + 1e-6
-    )  # Adding a small constant to avoid division by zero
-
-    # Create meshgrid to represent the coordinates
-    x = torch.arange(0, m).float().view(1, m, 1).to(heatmaps.device)
-    y = torch.arange(0, n).float().view(1, 1, n).to(heatmaps.device)
-
-    # Compute the weighted sum for x and y
-    x_sum = torch.sum(x * normalized_heatmaps, dim=[1, 2])
-    y_sum = torch.sum(y * normalized_heatmaps, dim=[1, 2])
-
-    locs = torch.stack([x_sum, y_sum], dim=1)
-
-    return locs
 
 
 def optimize_embedding(
@@ -450,4 +331,3 @@ def optimize_embedding(
     print(f"optimization took {time.time() - start} seconds")
 
     return context.detach()
-
