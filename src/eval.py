@@ -393,7 +393,7 @@ def evaluate(
 
         estimated_kpts = estimated_kpts.view(-1, 2)
 
-        gt_kpts = batch["kpts"][0].cuda()
+        gt_kpts = batch["kpts"][0].to(config.device)
         
         if config.evaluation_method == "mean_average_error" or config.evaluation_method == "pck":
             estimated_kpts *= 256
