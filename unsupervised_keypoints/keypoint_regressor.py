@@ -49,7 +49,6 @@ def find_best_indices(
     else:
         raise NotImplementedError
 
-    maps = []
     indices_list = []
 
     # create dataloader for the dataset
@@ -240,10 +239,7 @@ def return_regressor(X, Y):
 
 
 def return_regressor_human36m(X, Y):
-    
     from unsupervised_keypoints.eval import swap_points
-    
-    import numpy as np
     
     X = torch.tensor(X)-0.5
     Y = torch.tensor(Y)-0.5
@@ -271,4 +267,3 @@ def return_regressor_human36m(X, Y):
     
 
     return W.numpy()
-

@@ -13,27 +13,7 @@ from datasets import deepfashion
 from unsupervised_keypoints.invertable_transform import (
     RandomAffineWithInverse,
 )
-
-# now import weights and biases
 import wandb
-
-
-def save_img(map, img, point, name):
-    # save with matplotlib
-    # map is shape [32, 32]
-    import matplotlib.pyplot as plt
-
-    plt.imshow(map.cpu().detach().numpy())
-    plt.title(f"max: {torch.max(map).cpu().detach().numpy()}")
-    # plot point on image
-    plt.scatter(point[1].cpu() * 512, point[0].cpu() * 512, c="r")
-    plt.savefig(f"outputs/{name}_map.png")
-    plt.close()
-    # save original image current with shape [3, 512, 512]
-    plt.imshow(img.cpu().detach().numpy().transpose(1, 2, 0))
-    plt.scatter(point[1].cpu() * 512, point[0].cpu() * 512, c="r")
-    plt.savefig(f"outputs/{name}_img.png")
-    plt.close()
 
 
 def find_max_pixel(map):
@@ -154,45 +134,6 @@ def pixel_from_weighted_avg(heatmaps, distance=5):
 
     return torch.stack([x_sum, y_sum], dim=-1) + 0.5
 
-
-
-def find_corresponding_points(maps, num_points=10):
-    """
-    Finds the corresponding points between the maps.
-    Selects a set of maps with the common lowest entropy
-    Argmax of each of these is the corresponding point
-
-    map shape [num_images, num_tokens, h, w]
-
-    returns maximum pixel location and indices of the maps with the lowest entropy
-    """
-
-    num_images, num_tokens, h, w = maps.shape
-
-    import torch.distributions as dist
-
-    # Normalize the activation maps to represent probability distributions
-    attention_maps_softmax = torch.softmax(
-        maps.view(num_images * num_tokens, h * w), dim=-1
-    )
-
-    # Compute the entropy of each token
-    entropy = dist.Categorical(probs=attention_maps_softmax).entropy()
-
-    entropy = entropy.reshape(num_images, num_tokens)
-
-    entropy = entropy.sum(dim=0)
-
-    # get a sorted list of tokens with lowest entropy
-    sorted_entropy = torch.argsort(entropy)
-
-    chosen_maps = maps[:, sorted_entropy[:num_points], :, :]
-
-    highest_indices = find_max_pixel(chosen_maps.view(num_images * num_points, h, w))
-
-    highest_indices = highest_indices.reshape(num_images, num_points, 2)
-
-    return highest_indices, sorted_entropy[:num_points]
 
 @torch.no_grad()
 def run_image_with_context_augmented(
@@ -355,8 +296,6 @@ def run_image_with_context_augmented(
     return attention_maps
 
 
-
-
 def swap_points(points):
     """
     Swap keypoints for the human3.6m dataset
@@ -412,7 +351,6 @@ def evaluate(
     max_value = 0
 
     all_values = []
-    
     
     # create dataloader for the dataset
     dataloader = torch.utils.data.DataLoader(dataset, batch_size=1, shuffle=True, drop_last=True)
@@ -492,9 +430,6 @@ def evaluate(
                 l2_mean = swapped_l2_mean
                 
             l2_mean *= 128
-
-
-        
 
         all_values.append(l2_mean.item())
 

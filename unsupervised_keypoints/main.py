@@ -16,7 +16,7 @@ from unsupervised_keypoints.keypoint_regressor import (
 )
 
 from unsupervised_keypoints.eval import evaluate
-from unsupervised_keypoints.visualize import visualize_attn_maps, create_vid
+from unsupervised_keypoints.visualize import visualize_attn_maps
 
 
 # Argument parsing
