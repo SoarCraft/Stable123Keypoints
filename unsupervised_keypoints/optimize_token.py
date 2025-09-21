@@ -14,10 +14,7 @@
 
 import torch
 from diffusers import StableDiffusionPipeline, DDIMScheduler
-import numpy as np
 from unsupervised_keypoints import ptp_utils
-from PIL import Image
-import torch.nn.functional as F
 import torch.nn as nn
 
 
@@ -78,128 +75,6 @@ def load_ldm(device, type="CompVis/stable-diffusion-v1-4", feature_upsample_res=
     return ldm, controllers, effective_num_gpus
 
 
-def load_512(image_path, left=0, right=0, top=0, bottom=0):
-    if type(image_path) is str:
-        image = np.array(Image.open(image_path))[:, :, :3]
-    else:
-        image = image_path
-    h, w, c = image.shape
-    left = min(left, w - 1)
-    right = min(right, w - left - 1)
-    top = min(top, h - left - 1)
-    bottom = min(bottom, h - top - 1)
-    image = image[top : h - bottom, left : w - right]
-    h, w, c = image.shape
-    if h < w:
-        offset = (w - h) // 2
-        image = image[:, offset : offset + h]
-    elif w < h:
-        offset = (h - w) // 2
-        image = image[offset : offset + w]
-    image = np.array(Image.fromarray(image).resize((512, 512)))
-    return image
-
-
-def init_prompt(model, prompt: str):
-    uncond_input = model.tokenizer(
-        [""],
-        padding="max_length",
-        max_length=model.tokenizer.model_max_length,
-        return_tensors="pt",
-    )
-    uncond_embeddings = model.text_encoder(uncond_input.input_ids.to(model.device))[0]
-    text_input = model.tokenizer(
-        [prompt],
-        padding="max_length",
-        max_length=model.tokenizer.model_max_length,
-        truncation=True,
-        return_tensors="pt",
-    )
-    text_embeddings = model.text_encoder(text_input.input_ids.to(model.device))[0]
-    context = torch.cat([uncond_embeddings, text_embeddings])
-    prompt = prompt
-
-    return context, prompt
-
-
-def latent2image(model, latents):
-    latents = 1 / 0.18215 * latents
-    image = model.vae.decode(latents)["sample"]
-    image = (image / 2 + 0.5).clamp(0, 1)
-    image = image.cpu().permute(0, 2, 3, 1).numpy()
-    image = (image * 255).astype(np.uint8)
-    return image
-
-
-def reshape_attention(attention_map):
-    """takes average over 0th dimension and reshapes into square image
-
-    Args:
-        attention_map (4, img_size, -1): _description_
-    """
-    attention_map = attention_map.mean(0)
-    img_size = int(np.sqrt(attention_map.shape[0]))
-    attention_map = attention_map.reshape(img_size, img_size, -1)
-    return attention_map
-
-
-def visualize_attention_map(attention_map, file_name):
-    # save attention map
-    attention_map = attention_map.unsqueeze(-1).repeat(1, 1, 3)
-    attention_map = (attention_map - attention_map.min()) / (
-        attention_map.max() - attention_map.min()
-    )
-    attention_map = attention_map.detach().cpu().numpy()
-    attention_map = (attention_map * 255).astype(np.uint8)
-    img = Image.fromarray(attention_map)
-    img.save(file_name)
-
-
-def upscale_to_img_size(
-    controller,
-    from_where=["down_cross", "mid_cross", "up_cross"],
-    upsample_res=512,
-    layers=[0, 1, 2, 3, 4, 5],
-):
-    """
-    returns the bilinearly upsampled attention map of size upsample_res x upsample_res for the first word in the prompt
-    """
-
-    attention_maps = controller.get_average_attention()
-
-    imgs = []
-
-    layer_overall = -1
-
-    for key in from_where:
-        for layer in range(len(attention_maps[key])):
-            layer_overall += 1
-
-            if layer_overall not in layers:
-                continue
-
-            img = attention_maps[key][layer]
-
-            img = img.reshape(
-                4, int(img.shape[1] ** 0.5), int(img.shape[1] ** 0.5), img.shape[2]
-            )[None, :, :, :, 1]
-
-            if upsample_res != -1:
-                # bilinearly upsample the image to img_sizeximg_size
-                img = F.interpolate(
-                    img,
-                    size=(upsample_res, upsample_res),
-                    mode="bilinear",
-                    align_corners=False,
-                )
-
-            imgs.append(img)
-
-    imgs = torch.cat(imgs, dim=0)
-
-    return imgs
-
-
 def gaussian_circle(pos, size=64, sigma=16, device="cuda"):
     """Create a batch of 2D Gaussian circles with a given size, standard deviation, and center coordinates.
 
@@ -221,6 +96,7 @@ def gaussian_circle(pos, size=64, sigma=16, device="cuda"):
     gaussian = torch.exp(dist_sq)  # Shape [batch_size, size, size]
 
     return gaussian
+
 
 def gaussian_circles(pos, size=64, sigma=16, device="cuda"):
     """In the case of multiple points, pos has shape [batch_size, num_points, 2]
