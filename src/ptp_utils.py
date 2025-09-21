@@ -15,8 +15,6 @@
 import torch.distributions as dist
 import numpy as np
 import torch
-from typing import Optional
-from tqdm import tqdm
 import torch.nn.functional as F
 import abc
 from src.eval import find_max_pixel, find_k_max_pixels
@@ -245,8 +243,6 @@ def run_and_find_attn(
 
         controllers[controller].reset()
         
-        
-
     return attention_maps
 
 
@@ -290,117 +286,6 @@ def latent_step(model, controller, latents, context, t, guidance_scale, low_reso
     latents = model.scheduler.step(noise_pred, t, latents)["prev_sample"]
     latents = controller.step_callback(latents)
     return latents
-
-
-def register_attention_control_generation(model, controller, target_attn_maps, indices):
-    def ca_forward(self, place_in_unet):
-        to_out = self.to_out
-        if type(to_out) is torch.nn.modules.container.ModuleList:
-            to_out = self.to_out[0]
-        else:
-            to_out = self.to_out
-
-        def forward(x, context=None, mask=None):
-            batch_size, sequence_length, dim = x.shape
-            h = self.heads
-            q = self.to_q(x)
-            is_cross = context is not None
-            context = context if is_cross else x
-            k = self.to_k(context)
-            v = self.to_v(context)
-            q = self.reshape_heads_to_batch_dim(q)
-            k = self.reshape_heads_to_batch_dim(k)
-            v = self.reshape_heads_to_batch_dim(v)
-
-            sim = torch.einsum("b i d, b j d -> b i j", q, k) * self.scale
-
-            if mask is not None:
-                mask = mask.reshape(batch_size, -1)
-                max_neg_value = -torch.finfo(sim.dtype).max
-                mask = mask[:, None, :].repeat(h, 1, 1)
-                sim.masked_fill_(~mask, max_neg_value)
-
-            # attention, what we cannot get enough of
-            attn = sim.softmax(dim=-1)
-            
-            out = torch.einsum("b i j, b j d -> b i d", attn, v)
-            out = self.reshape_batch_dim_to_heads(out)
-            return to_out(out)
-
-        return forward
-    
-    class DummyController:
-        def __call__(self, *args):
-            return args[0]
-
-        def __init__(self):
-            self.num_att_layers = 0
-
-    if controller is None:
-        controller = DummyController()
-
-    def register_recr(net_, count, place_in_unet):
-        if net_.__class__.__name__ == "Attention":
-            net_.forward = ca_forward(net_, place_in_unet)
-            return count + 1
-        elif hasattr(net_, "children"):
-            for net__ in net_.children():
-                count = register_recr(net__, count, place_in_unet)
-        return count
-
-    cross_att_count = 0
-    sub_nets = model.unet.named_children()
-    for net in sub_nets:
-        if "up" in net[0]:
-            cross_att_count += register_recr(net[1], 0, "up")
-            
-    print("cross_att_count")
-    print(cross_att_count)
-
-    controller.num_att_layers = cross_att_count
-
-
-
-@torch.no_grad()
-def text2image_ldm_stable(
-    model,
-    embedding,
-    controller,
-    num_inference_steps: int = 50,
-    guidance_scale: float = 7.5,
-    generator: Optional[torch.Generator] = None,
-    latent: Optional[torch.FloatTensor] = None,
-):
-    target_attn_maps = torch.load("example_attn_maps_indices.pt")
-    indices = torch.load("outputs/indices.pt")
-    register_attention_control_generation(model, controller, target_attn_maps, indices)
-    height = width = 512
-    
-    
-    uncond_input = model.tokenizer(
-        [""], padding="max_length", max_length=77, return_tensors="pt"
-    )
-    uncond_embeddings = model.text_encoder(uncond_input.input_ids.to(model.device))[0]
-
-    latents = torch.randn(
-        (1, model.unet.in_channels, height // 8, width // 8),
-        generator=generator,
-    ).to(model.device)
-    
-    context = [uncond_embeddings, embedding]
-
-    # set timesteps
-    # extra_set_kwargs = {"offset": 1}
-    extra_set_kwargs = {}
-    model.scheduler.set_timesteps(num_inference_steps, **extra_set_kwargs)
-    for t in tqdm(model.scheduler.timesteps):
-        latents = latent_step(model, controller, latents, context, t, guidance_scale=guidance_scale, low_resource = True)
-        controller.reset()
-    # latents = latent_step(model, controller, latents, context, t, guidance_scale=guidance_scale, low_resource = True)
-
-    image = latent2image(model.vae, latents)
-
-    return image, latent
 
 
 def register_attention_control(model, controller, feature_upsample_res=256):
@@ -488,8 +373,10 @@ def register_attention_control(model, controller, feature_upsample_res=256):
 
     def register_recr(net_, count, place_in_unet):
         if net_.__class__.__name__ == "Attention":
-            net_.forward = ca_forward(net_, place_in_unet)
-            return count + 1
+            is_cross_attention = getattr(net_, 'is_cross_attention', False)
+            if is_cross_attention:
+                net_.forward = ca_forward(net_, place_in_unet)
+                return count + 1
         elif hasattr(net_, "children"):
             for net__ in net_.children():
                 count = register_recr(net__, count, place_in_unet)
@@ -503,7 +390,7 @@ def register_attention_control(model, controller, feature_upsample_res=256):
 
     controller.num_att_layers = cross_att_count
     
-    assert cross_att_count != 0, f"No attention layers found in the model. Please check the model structure. Found {cross_att_count} attention layers."
+    assert cross_att_count != 0, f"No cross-attention layers found in the model. Please check the model structure. Found {cross_att_count} cross-attention layers."
 
 
 def init_random_noise(device, num_words=77):
