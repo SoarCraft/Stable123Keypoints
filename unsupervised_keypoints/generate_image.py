@@ -16,9 +16,7 @@ MY_TOKEN = ""
 NUM_DDIM_STEPS = 50
 scheduler.set_timesteps(NUM_DDIM_STEPS)
 
-
 for i in range(100):
-
     model = StableDiffusionPipeline.from_pretrained(
         "runwayml/stable-diffusion-v1-5", use_auth_token=MY_TOKEN, scheduler=scheduler
     ).to(device)

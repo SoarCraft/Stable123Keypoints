@@ -10,6 +10,7 @@ from datasets import taichi
 from datasets import human36m
 from datasets import unaligned_human36m
 from datasets import deepfashion
+from unsupervised_keypoints.config_utils import Config
 from unsupervised_keypoints.invertable_transform import (
     RandomAffineWithInverse,
 )
@@ -316,33 +317,33 @@ def evaluate(
     context,
     indices,
     regressor,
-    args,
+    config: Config,
     controllers,
     num_gpus,
     from_where=["down_cross", "mid_cross", "up_cross"],
 ):
-    if args.dataset_name == "celeba_aligned":
-        dataset = CelebA(split="test", dataset_loc=args.dataset_loc)
-    elif args.dataset_name == "celeba_wild":
-        dataset = CelebA(split="test", dataset_loc=args.dataset_loc, align = False)
-    elif args.dataset_name == "cub_aligned":
-        dataset = cub.TestSet(data_root=args.dataset_loc, image_size=512)
-    elif args.dataset_name == "cub_001":
-        dataset = cub_parts.CUBDataset(dataset_root=args.dataset_loc, split="test", single_class=1)
-    elif args.dataset_name == "cub_002":
-        dataset = cub_parts.CUBDataset(dataset_root=args.dataset_loc, split="test", single_class=2)
-    elif args.dataset_name == "cub_003":
-        dataset = cub_parts.CUBDataset(dataset_root=args.dataset_loc, split="test", single_class=3)
-    elif args.dataset_name == "cub_all":
-        dataset = cub_parts.CUBDataset(dataset_root=args.dataset_loc, split="test")
-    elif args.dataset_name == "taichi":
-        dataset = taichi.TestSet(data_root=args.dataset_loc, image_size=512)
-    elif args.dataset_name == "human3.6m":
-        dataset = human36m.TestSet(data_root=args.dataset_loc, validation=args.validation)
-    elif args.dataset_name == "unaligned_human3.6m":
-        dataset = unaligned_human36m.TestSet(data_root=args.dataset_loc, image_size=512)
-    elif args.dataset_name == "deepfashion":
-        dataset = deepfashion.TestSet(data_root=args.dataset_loc, image_size=512)
+    if config.dataset_name == "celeba_aligned":
+        dataset = CelebA(split="test", dataset_loc=config.dataset_loc)
+    elif config.dataset_name == "celeba_wild":
+        dataset = CelebA(split="test", dataset_loc=config.dataset_loc, align = False)
+    elif config.dataset_name == "cub_aligned":
+        dataset = cub.TestSet(data_root=config.dataset_loc, image_size=512)
+    elif config.dataset_name == "cub_001":
+        dataset = cub_parts.CUBDataset(dataset_root=config.dataset_loc, split="test", single_class=1)
+    elif config.dataset_name == "cub_002":
+        dataset = cub_parts.CUBDataset(dataset_root=config.dataset_loc, split="test", single_class=2)
+    elif config.dataset_name == "cub_003":
+        dataset = cub_parts.CUBDataset(dataset_root=config.dataset_loc, split="test", single_class=3)
+    elif config.dataset_name == "cub_all":
+        dataset = cub_parts.CUBDataset(dataset_root=config.dataset_loc, split="test")
+    elif config.dataset_name == "taichi":
+        dataset = taichi.TestSet(data_root=config.dataset_loc, image_size=512)
+    elif config.dataset_name == "human3.6m":
+        dataset = human36m.TestSet(data_root=config.dataset_loc, validation=config.validation)
+    elif config.dataset_name == "unaligned_human3.6m":
+        dataset = unaligned_human36m.TestSet(data_root=config.dataset_loc, image_size=512)
+    elif config.dataset_name == "deepfashion":
+        dataset = deepfashion.TestSet(data_root=config.dataset_loc, image_size=512)
     else:
         raise NotImplementedError
 
@@ -368,21 +369,21 @@ def evaluate(
             img,
             context,
             indices.cpu(),
-            device=args.device,
+            device=config.device,
             from_where=from_where,
-            layers=args.layers,
-            noise_level=args.noise_level,
-            augmentation_iterations=args.augmentation_iterations,
-            augment_degrees=args.augment_degrees,
-            augment_scale=args.augment_scale,
-            augment_translate=args.augment_translate,
+            layers=config.layers,
+            noise_level=config.noise_level,
+            augmentation_iterations=config.augmentation_iterations,
+            augment_degrees=config.augment_degrees,
+            augment_scale=config.augment_scale,
+            augment_translate=config.augment_translate,
             controllers=controllers,
             num_gpus=num_gpus,
-            save_folder=args.save_folder,
-            visualize=(i==0 and args.visualize),
+            save_folder=config.save_folder,
+            visualize=(i==0 and config.visualize),
         )
         
-        if args.max_loc_strategy == "argmax":
+        if config.max_loc_strategy == "argmax":
             highest_indices = find_max_pixel(attention_maps) / 512.0
         else:
             highest_indices = pixel_from_weighted_avg(attention_maps) / 512.0
@@ -394,14 +395,14 @@ def evaluate(
 
         gt_kpts = batch["kpts"][0].cuda()
         
-        if args.evaluation_method == "mean_average_error" or args.evaluation_method == "pck":
+        if config.evaluation_method == "mean_average_error" or config.evaluation_method == "pck":
             estimated_kpts *= 256
             gt_kpts *= 256
 
         # get l2 distance between estimated and gt kpts
         l2 = (estimated_kpts - gt_kpts).norm(dim=-1)
         
-        if args.evaluation_method == "inter_eye_distance":
+        if config.evaluation_method == "inter_eye_distance":
 
             eye_dist = torch.sqrt(torch.sum((gt_kpts[0] - gt_kpts[1]) ** 2, dim=-1))
 
@@ -409,18 +410,18 @@ def evaluate(
             
             l2_mean = torch.mean(l2)
             
-        if args.evaluation_method == "visible" or args.evaluation_method == "mean_average_error":
-            visible = batch['visibility'][0].to(args.device) if 'visibility' in batch else torch.ones_like(l2)
+        if config.evaluation_method == "visible" or config.evaluation_method == "mean_average_error":
+            visible = batch['visibility'][0].to(config.device) if 'visibility' in batch else torch.ones_like(l2)
             
             l2_mean = (l2*visible).sum()
             
-        if args.evaluation_method == "visible":
+        if config.evaluation_method == "visible":
             l2_mean /= visible.sum()
             
-        if args.evaluation_method == "pck":
+        if config.evaluation_method == "pck":
             l2_mean = (l2 < 6).float().mean()
             
-        if args.evaluation_method == "orientation_invariant":
+        if config.evaluation_method == "orientation_invariant":
             l2_mean = l2.mean()
             swapped_kpts = swap_points(estimated_kpts[None])[0]
             
@@ -450,9 +451,9 @@ def evaluate(
             print()
         # Extract the 10 worst distances (and their indices) from the priority queue
 
-    if args.wandb:
+    if config.wandb:
         wandb.log({"mean_distance": torch.mean(torch.stack(distances))})
     print()
 
     # save argsorted all_values in torch
-    torch.save(torch.tensor(all_values), os.path.join(args.save_folder, "all_errors.pt"))
+    torch.save(torch.tensor(all_values), os.path.join(config.save_folder, "all_errors.pt"))

@@ -15,6 +15,7 @@ from datasets import deepfashion
 from unsupervised_keypoints import optimize_token
 import wandb
 from unsupervised_keypoints.invertable_transform import RandomAffineWithInverse
+from unsupervised_keypoints.config_utils import Config
 
 
 def collect_maps(
@@ -149,56 +150,56 @@ def find_gaussian_loss_at_point(
 
 def optimize_embedding(
     ldm,
-    args,
+    config: Config,
     controllers,
     num_gpus,
     context=None,
     from_where=["down_cross", "mid_cross", "up_cross"],
 ):
     
-    if args.dataset_name == "celeba_aligned":
-        dataset = CelebA(split="train", dataset_loc=args.dataset_loc, max_len=args.max_len)
-    elif args.dataset_name == "celeba_wild":
-        dataset = CelebA(split="train", dataset_loc=args.dataset_loc, align = False, max_len=args.max_len)
-    elif args.dataset_name == "cub_aligned":
-        dataset = cub.TrainSet(data_root=args.dataset_loc, image_size=512)
-    elif args.dataset_name == "cub_001":
-        dataset = cub_parts.CUBDataset(dataset_root=args.dataset_loc, split="train", single_class=1)
-    elif args.dataset_name == "cub_002":
-        dataset = cub_parts.CUBDataset(dataset_root=args.dataset_loc, split="train", single_class=2)
-    elif args.dataset_name == "cub_003":
-        dataset = cub_parts.CUBDataset(dataset_root=args.dataset_loc, split="train", single_class=3)
-    elif args.dataset_name == "cub_all":
-        dataset = cub_parts.CUBDataset(dataset_root=args.dataset_loc, split="train")
-    elif args.dataset_name == "taichi":
-        dataset = taichi.TrainSet(data_root=args.dataset_loc, image_size=512)
-    elif args.dataset_name == "human3.6m":
-        dataset = human36m.TrainSet(data_root=args.dataset_loc, validation=args.validation)
-    elif args.dataset_name == "unaligned_human3.6m":
-        dataset = unaligned_human36m.TrainSet(data_root=args.dataset_loc, image_size=512)
-    elif args.dataset_name == "deepfashion":
-        dataset = deepfashion.TrainSet(data_root=args.dataset_loc, image_size=512)
-    elif args.dataset_name == "custom":
-        dataset = custom_images.CustomDataset(data_root=args.dataset_loc, image_size=512)
+    if config.dataset_name == "celeba_aligned":
+        dataset = CelebA(split="train", dataset_loc=config.dataset_loc, max_len=config.max_len)
+    elif config.dataset_name == "celeba_wild":
+        dataset = CelebA(split="train", dataset_loc=config.dataset_loc, align = False, max_len=config.max_len)
+    elif config.dataset_name == "cub_aligned":
+        dataset = cub.TrainSet(data_root=config.dataset_loc, image_size=512)
+    elif config.dataset_name == "cub_001":
+        dataset = cub_parts.CUBDataset(dataset_root=config.dataset_loc, split="train", single_class=1)
+    elif config.dataset_name == "cub_002":
+        dataset = cub_parts.CUBDataset(dataset_root=config.dataset_loc, split="train", single_class=2)
+    elif config.dataset_name == "cub_003":
+        dataset = cub_parts.CUBDataset(dataset_root=config.dataset_loc, split="train", single_class=3)
+    elif config.dataset_name == "cub_all":
+        dataset = cub_parts.CUBDataset(dataset_root=config.dataset_loc, split="train")
+    elif config.dataset_name == "taichi":
+        dataset = taichi.TrainSet(data_root=config.dataset_loc, image_size=512)
+    elif config.dataset_name == "human3.6m":
+        dataset = human36m.TrainSet(data_root=config.dataset_loc, validation=config.validation)
+    elif config.dataset_name == "unaligned_human3.6m":
+        dataset = unaligned_human36m.TrainSet(data_root=config.dataset_loc, image_size=512)
+    elif config.dataset_name == "deepfashion":
+        dataset = deepfashion.TrainSet(data_root=config.dataset_loc, image_size=512)
+    elif config.dataset_name == "custom":
+        dataset = custom_images.CustomDataset(data_root=config.dataset_loc, image_size=512)
     else:
         raise NotImplementedError
 
 
     invertible_transform = RandomAffineWithInverse(
-        degrees=args.augment_degrees,
-        scale=args.augment_scale,
-        translate=args.augment_translate,
+        degrees=config.augment_degrees,
+        scale=config.augment_scale,
+        translate=config.augment_translate,
     )
 
     # every iteration return image, pixel_loc
 
     if context is None:
-        context = ptp_utils.init_random_noise(args.device, num_words=args.num_tokens)
+        context = ptp_utils.init_random_noise(config.device, num_words=config.num_tokens)
 
     context.requires_grad = True
 
     # optimize context to maximize attention at pixel_loc
-    optimizer = torch.optim.Adam([context], lr=args.lr)
+    optimizer = torch.optim.Adam([context], lr=config.lr)
 
     # time the optimization
     import time
@@ -217,7 +218,7 @@ def optimize_embedding(
     
     # import ipdb; ipdb.set_trace()  
     
-    for iteration in tqdm(range(int(int(args.num_steps)*(args.batch_size//num_gpus)))):
+    for iteration in tqdm(range(int(int(config.num_steps)*(config.batch_size//num_gpus)))):
         
         try:
             mini_batch = next(dataloader_iter)
@@ -231,11 +232,11 @@ def optimize_embedding(
             ldm,
             image,
             context,
-            layers=args.layers,
-            noise_level=args.noise_level,
+            layers=config.layers,
+            noise_level=config.noise_level,
             from_where=from_where,
             upsample_res=-1,
-            device=args.device,
+            device=config.device,
             controllers=controllers,
         )
         
@@ -247,11 +248,11 @@ def optimize_embedding(
             ldm,
             transformed_img,
             context,
-            layers=args.layers,
-            noise_level=args.noise_level,
+            layers=config.layers,
+            noise_level=config.noise_level,
             from_where=from_where,
             upsample_res=-1,
-            device=args.device,
+            device=config.device,
             controllers=controllers,
         )
         
@@ -260,22 +261,22 @@ def optimize_embedding(
         
         for index, attn_map, attention_map_transformed in zip(torch.arange(num_gpus), attn_maps, attention_maps_transformed):
 
-            if args.top_k_strategy == "entropy":
+            if config.top_k_strategy == "entropy":
                 top_embedding_indices = ptp_utils.entropy_sort(
-                    attn_map, args.furthest_point_num_samples,
+                    attn_map, config.furthest_point_num_samples,
                 )
-            elif args.top_k_strategy == "gaussian":
+            elif config.top_k_strategy == "gaussian":
                 top_embedding_indices = ptp_utils.find_top_k_gaussian(
-                    attn_map, args.furthest_point_num_samples, sigma=args.sigma, num_subjects = args.num_subjects
+                    attn_map, config.furthest_point_num_samples, sigma=config.sigma, num_subjects = config.num_subjects
                 )
-            elif args.top_k_strategy == "consistent":
-                top_embedding_indices = torch.arange(args.furthest_point_num_samples)
+            elif config.top_k_strategy == "consistent":
+                top_embedding_indices = torch.arange(config.furthest_point_num_samples)
             else:
                 raise NotImplementedError
             
-            top_embedding_indices = ptp_utils.furthest_point_sampling(attention_map_transformed, args.top_k, top_embedding_indices)
+            top_embedding_indices = ptp_utils.furthest_point_sampling(attention_map_transformed, config.top_k, top_embedding_indices)
 
-            _sharpening_loss.append(sharpening_loss(attn_map[top_embedding_indices], device=args.device, sigma=args.sigma, num_subjects = args.num_subjects))
+            _sharpening_loss.append(sharpening_loss(attn_map[top_embedding_indices], device=config.device, sigma=config.sigma, num_subjects = config.num_subjects))
 
             _loss_equivariance_attn.append(equivariance_loss(
                 attn_map[top_embedding_indices], attention_map_transformed[top_embedding_indices][None].repeat(num_gpus, 1, 1, 1), invertible_transform, index
@@ -290,22 +291,22 @@ def optimize_embedding(
         # use the old loss for the first 1000 iterations
         # new loss is unstable for early iterations
         loss = (
-            + _loss_equivariance_attn * args.equivariance_attn_loss_weight
-            + _sharpening_loss * args.sharpening_loss_weight
+            + _loss_equivariance_attn * config.equivariance_attn_loss_weight
+            + _sharpening_loss * config.sharpening_loss_weight
         )
 
-        running_equivariance_attn_loss += _loss_equivariance_attn / (args.batch_size//num_gpus) * args.equivariance_attn_loss_weight
-        running_sharpening_loss += _sharpening_loss / (args.batch_size//num_gpus) * args.sharpening_loss_weight
-        running_total_loss += loss / (args.batch_size//num_gpus)
+        running_equivariance_attn_loss += _loss_equivariance_attn / (config.batch_size//num_gpus) * config.equivariance_attn_loss_weight
+        running_sharpening_loss += _sharpening_loss / (config.batch_size//num_gpus) * config.sharpening_loss_weight
+        running_total_loss += loss / (config.batch_size//num_gpus)
 
-        loss = loss / (args.batch_size//num_gpus)
+        loss = loss / (config.batch_size//num_gpus)
 
         loss.backward()
-        if (iteration + 1) % (args.batch_size//num_gpus) == 0:
+        if (iteration + 1) % (config.batch_size//num_gpus) == 0:
             optimizer.step()
             optimizer.zero_grad()
 
-            if args.wandb:
+            if config.wandb:
                 wandb.log(
                     {
                         "loss": running_total_loss.item(),

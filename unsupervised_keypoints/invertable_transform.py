@@ -92,7 +92,6 @@ class RandomAffineWithInverse:
         return untransformed_img
 
 
-
 def return_theta(scale, pixel_loc, rotation_angle_degrees=0):
     """
     Pixel_loc between 0 and 1

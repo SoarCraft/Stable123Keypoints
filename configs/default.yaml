@@ -4,7 +4,7 @@
 # 模型相关配置
 model:
   type: "sd-legacy/stable-diffusion-v1-5" # LDM模型类型
-  my_token: null # Hugging Face token（必须在使用时提供）
+  my_token: null # Hugging Face token（可选）
 
 # 数据集相关配置
 dataset:

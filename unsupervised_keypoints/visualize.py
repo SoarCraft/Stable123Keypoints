@@ -1,4 +1,4 @@
-# load the dataset
+from unsupervised_keypoints.config_utils import Config
 import os
 import torch
 from tqdm import tqdm
@@ -122,7 +122,7 @@ def visualize_attn_maps(
     ldm,
     context,
     indices,
-    args,
+    config: Config,
     controllers,
     num_gpus,
     regressor=None,
@@ -130,30 +130,30 @@ def visualize_attn_maps(
     height = 11,
     width = 9,
 ):
-    if args.dataset_name == "celeba_aligned":
-        dataset = CelebA(split="test", dataset_loc=args.dataset_loc)
-    elif args.dataset_name == "celeba_wild":
-        dataset = CelebA(split="test", dataset_loc=args.dataset_loc, align = False)
-    elif args.dataset_name == "cub_aligned":
-        dataset = cub.TestSet(data_root=args.dataset_loc, image_size=512)
-    elif args.dataset_name == "cub_001":
-        dataset = cub_parts.CUBDataset(dataset_root=args.dataset_loc, split="test", single_class=1)
-    elif args.dataset_name == "cub_002":
-        dataset = cub_parts.CUBDataset(dataset_root=args.dataset_loc, split="test", single_class=2)
-    elif args.dataset_name == "cub_003":
-        dataset = cub_parts.CUBDataset(dataset_root=args.dataset_loc, split="test", single_class=3)
-    elif args.dataset_name == "cub_all":
-        dataset = cub_parts.CUBDataset(dataset_root=args.dataset_loc, split="test")
-    elif args.dataset_name == "taichi":
-        dataset = taichi.TestSet(data_root=args.dataset_loc, image_size=512)
-    elif args.dataset_name == "human3.6m":
-        dataset = human36m.TestSet(data_root=args.dataset_loc, validation=args.validation)
-    elif args.dataset_name == "unaligned_human3.6m":
-        dataset = unaligned_human36m.TestSet(data_root=args.dataset_loc, image_size=512)
-    elif args.dataset_name == "deepfashion":
-        dataset = deepfashion.TestSet(data_root=args.dataset_loc, image_size=512)
-    elif args.dataset_name == "custom":
-        dataset = custom_images.CustomDataset(data_root=args.dataset_loc, image_size=512)
+    if config.dataset_name == "celeba_aligned":
+        dataset = CelebA(split="test", dataset_loc=config.dataset_loc)
+    elif config.dataset_name == "celeba_wild":
+        dataset = CelebA(split="test", dataset_loc=config.dataset_loc, align = False)
+    elif config.dataset_name == "cub_aligned":
+        dataset = cub.TestSet(data_root=config.dataset_loc, image_size=512)
+    elif config.dataset_name == "cub_001":
+        dataset = cub_parts.CUBDataset(dataset_root=config.dataset_loc, split="test", single_class=1)
+    elif config.dataset_name == "cub_002":
+        dataset = cub_parts.CUBDataset(dataset_root=config.dataset_loc, split="test", single_class=2)
+    elif config.dataset_name == "cub_003":
+        dataset = cub_parts.CUBDataset(dataset_root=config.dataset_loc, split="test", single_class=3)
+    elif config.dataset_name == "cub_all":
+        dataset = cub_parts.CUBDataset(dataset_root=config.dataset_loc, split="test")
+    elif config.dataset_name == "taichi":
+        dataset = taichi.TestSet(data_root=config.dataset_loc, image_size=512)
+    elif config.dataset_name == "human3.6m":
+        dataset = human36m.TestSet(data_root=config.dataset_loc, validation=config.validation)
+    elif config.dataset_name == "unaligned_human3.6m":
+        dataset = unaligned_human36m.TestSet(data_root=config.dataset_loc, image_size=512)
+    elif config.dataset_name == "deepfashion":
+        dataset = deepfashion.TestSet(data_root=config.dataset_loc, image_size=512)
+    elif config.dataset_name == "custom":
+        dataset = custom_images.CustomDataset(data_root=config.dataset_loc, image_size=512)
     else:
         raise NotImplementedError
 
@@ -178,37 +178,37 @@ def visualize_attn_maps(
             img,
             context,
             indices.cpu(),
-            device=args.device,
+            device=config.device,
             from_where=from_where,
-            layers=args.layers,
-            noise_level=args.noise_level,
-            augment_degrees=args.augment_degrees,
-            augment_scale=args.augment_scale,
-            augment_translate=args.augment_translate,
-            augmentation_iterations=args.augmentation_iterations,
-            visualize=(i==0 and args.visualize),
+            layers=config.layers,
+            noise_level=config.noise_level,
+            augment_degrees=config.augment_degrees,
+            augment_scale=config.augment_scale,
+            augment_translate=config.augment_translate,
+            augmentation_iterations=config.augmentation_iterations,
+            visualize=(i==0 and config.visualize),
             controllers=controllers,
             num_gpus=num_gpus,
-            save_folder=args.save_folder,
+            save_folder=config.save_folder,
         )
 
         maps.append(map_out.cpu())
     maps = torch.stack(maps)
     gt_kpts = torch.stack(gt_kpts)
 
-    if args.max_loc_strategy == "argmax":
-        points = find_max_pixel(maps.view(height * width * args.top_k, 512, 512)) / 512.0
+    if config.max_loc_strategy == "argmax":
+        points = find_max_pixel(maps.view(height * width * config.top_k, 512, 512)) / 512.0
     else:
-        points = pixel_from_weighted_avg(maps.view(height * width * args.top_k, 512, 512)) / 512.0
-    points = points.reshape(height * width, args.top_k, 2)
+        points = pixel_from_weighted_avg(maps.view(height * width * config.top_k, 512, 512)) / 512.0
+    points = points.reshape(height * width, config.top_k, 2)
 
     plot_point_correspondences(
-        imgs, points.cpu(), os.path.join(args.save_folder, "unsupervised_keypoints.pdf"), height, width
+        imgs, points.cpu(), os.path.join(config.save_folder, "unsupervised_keypoints.pdf"), height, width
     )
 
-    for i in range(args.top_k):
+    for i in range(config.top_k):
         save_grid(
-            maps[:, i].cpu(), imgs, os.path.join(args.save_folder, f"keypoint_{i:03d}.png")
+            maps[:, i].cpu(), imgs, os.path.join(config.save_folder, f"keypoint_{i:03d}.png")
         )
 
     if regressor is not None:
@@ -217,11 +217,11 @@ def visualize_attn_maps(
         plot_point_correspondences(
             imgs,
             est_points.view(height * width, -1, 2).cpu(),
-            os.path.join(args.save_folder, "estimated_keypoints.pdf"),
+            os.path.join(config.save_folder, "estimated_keypoints.pdf"),
             height,
             width,
         )
 
         plot_point_correspondences(
-            imgs, gt_kpts, os.path.join(args.save_folder, "gt_keypoints.pdf"), height, width
+            imgs, gt_kpts, os.path.join(config.save_folder, "gt_keypoints.pdf"), height, width
         )

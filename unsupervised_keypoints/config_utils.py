@@ -1,14 +1,139 @@
 """
 配置管理工具模块
-提供基于OmegaConf的配置加载和管理功能
+提供基于强类型配置类的配置加载和管理功能
 """
 
 import os
 import argparse
-from pathlib import Path
-from typing import Any, Dict, Optional
+from typing import Any, Dict, Optional, List
+from dataclasses import dataclass
 from omegaconf import OmegaConf, DictConfig
 import torch
+
+
+@dataclass
+class Config:
+    """主配置类，包含所有配置项"""
+    # Model configuration
+    model_type: str = "sd-legacy/stable-diffusion-v1-5"
+    my_token: Optional[str] = None
+    
+    # Dataset configuration
+    dataset_name: str = "celeba_aligned"
+    dataset_location: str = "~"
+    max_len: int = -1
+    validation: bool = False
+    
+    # Training configuration
+    device: str = "cuda:0"
+    lr: float = 0.005
+    num_steps: int = 500
+    num_tokens: int = 500
+    batch_size: int = 4
+    
+    # Features configuration
+    feature_upsample_res: int = 128
+    layers: List[int] = None
+    noise_level: int = -1
+    
+    # Keypoints configuration
+    top_k: int = 10
+    top_k_strategy: str = "gaussian"
+    max_loc_strategy: str = "argmax"
+    min_dist: float = 0.1
+    max_num_points: int = 50000
+    num_indices: int = 100
+    num_subjects: int = 1
+    sigma: float = 2.0
+    
+    # Loss configuration
+    sharpening_loss_weight: float = 100.0
+    equivariance_attn_loss_weight: float = 1000.0
+    
+    # Augmentation configuration
+    augment_degrees: float = 15.0
+    augment_scale: List[float] = None
+    augment_translate: List[float] = None
+    augmentation_iterations: int = 10
+    
+    # Evaluation configuration
+    evaluation_method: str = "inter_eye_distance"
+    furthest_point_num_samples: int = 25
+    
+    # Visualization configuration
+    visualize: bool = False
+    save_folder: str = "outputs"
+    
+    # Wandb configuration
+    wandb_enabled: bool = False
+    wandb_name: str = "temp"
+    
+    def __post_init__(self):
+        if self.layers is None:
+            self.layers = [0, 1, 2, 3]
+        if self.augment_scale is None:
+            self.augment_scale = [0.8, 1.0]
+        if self.augment_translate is None:
+            self.augment_translate = [0.25, 0.25]
+    
+    @classmethod
+    def from_dict_config(cls, dict_config: DictConfig) -> 'Config':
+        """从OmegaConf DictConfig创建Config实例"""
+        return cls(
+            # Model configuration
+            model_type=dict_config.model.type,
+            my_token=dict_config.model.get('my_token', None),
+            
+            # Dataset configuration
+            dataset_name=dict_config.dataset.name,
+            dataset_location=dict_config.dataset.location,
+            max_len=dict_config.dataset.max_len,
+            validation=dict_config.dataset.validation,
+            
+            # Training configuration
+            device=dict_config.training.device,
+            lr=dict_config.training.lr,
+            num_steps=dict_config.training.num_steps,
+            num_tokens=dict_config.training.num_tokens,
+            batch_size=dict_config.training.batch_size,
+            
+            # Features configuration
+            feature_upsample_res=dict_config.features.upsample_res,
+            layers=list(dict_config.features.layers),
+            noise_level=dict_config.features.noise_level,
+            
+            # Keypoints configuration
+            top_k=dict_config.keypoints.top_k,
+            top_k_strategy=dict_config.keypoints.top_k_strategy,
+            max_loc_strategy=dict_config.keypoints.max_loc_strategy,
+            min_dist=dict_config.keypoints.min_dist,
+            max_num_points=dict_config.keypoints.max_num_points,
+            num_indices=dict_config.keypoints.num_indices,
+            num_subjects=dict_config.keypoints.num_subjects,
+            sigma=dict_config.keypoints.sigma,
+            
+            # Loss configuration
+            sharpening_loss_weight=dict_config.loss.sharpening_weight,
+            equivariance_attn_loss_weight=dict_config.loss.equivariance_attn_weight,
+            
+            # Augmentation configuration
+            augment_degrees=dict_config.augmentation.degrees,
+            augment_scale=list(dict_config.augmentation.scale),
+            augment_translate=list(dict_config.augmentation.translate),
+            augmentation_iterations=dict_config.augmentation.iterations,
+            
+            # Evaluation configuration
+            evaluation_method=dict_config.evaluation.method,
+            furthest_point_num_samples=dict_config.evaluation.furthest_point_num_samples,
+            
+            # Visualization configuration
+            visualize=dict_config.visualization.visualize,
+            save_folder=dict_config.visualization.save_folder,
+            
+            # Wandb configuration
+            wandb_enabled=dict_config.wandb.enabled,
+            wandb_name=dict_config.wandb.name
+        )
 
 
 def load_config(config_path: str, overrides: Optional[Dict[str, Any]] = None) -> DictConfig:
@@ -42,7 +167,7 @@ def load_config(config_path: str, overrides: Optional[Dict[str, Any]] = None) ->
     return config
 
 
-def validate_config(config: DictConfig) -> None:
+def validate_config(config: Config) -> None:
     """
     验证配置的必要字段和合法性
     
@@ -53,20 +178,14 @@ def validate_config(config: DictConfig) -> None:
         ValueError: 配置验证失败
     """
     # 验证必需的字段
-    required_fields = [
-        "model.my_token",
-        "dataset.name", 
-        "training.device",
-        "training.lr",
-        "training.num_steps"
-    ]
-    
-    for field in required_fields:
-        if not OmegaConf.select(config, field):
-            if field == "model.my_token":
-                raise ValueError(f"必须提供Hugging Face token: {field}")
-            else:
-                raise ValueError(f"配置中缺少必需字段: {field}")
+    if not config.dataset_name:
+        raise ValueError("配置中缺少必需字段: dataset_name")
+    if not config.device:
+        raise ValueError("配置中缺少必需字段: device")
+    if config.lr <= 0:
+        raise ValueError("学习率必须大于0")
+    if config.num_steps <= 0:
+        raise ValueError("训练步数必须大于0")
     
     # 验证数据集名称
     valid_datasets = [
@@ -74,97 +193,27 @@ def validate_config(config: DictConfig) -> None:
         "cub_002", "cub_003", "cub_all", "deepfashion", "taichi", 
         "human3.6m", "unaligned_human3.6m", "custom"
     ]
-    if config.dataset.name not in valid_datasets:
-        raise ValueError(f"不支持的数据集: {config.dataset.name}. 支持的数据集: {valid_datasets}")
+    if config.dataset_name not in valid_datasets:
+        raise ValueError(f"不支持的数据集: {config.dataset_name}. 支持的数据集: {valid_datasets}")
     
     # 验证策略选择
     valid_top_k_strategies = ["entropy", "gaussian", "consistent"]
-    if config.keypoints.top_k_strategy not in valid_top_k_strategies:
-        raise ValueError(f"不支持的top_k策略: {config.keypoints.top_k_strategy}")
+    if config.top_k_strategy not in valid_top_k_strategies:
+        raise ValueError(f"不支持的top_k策略: {config.top_k_strategy}")
     
     valid_max_loc_strategies = ["argmax", "weighted_avg"]
-    if config.keypoints.max_loc_strategy not in valid_max_loc_strategies:
-        raise ValueError(f"不支持的max_loc策略: {config.keypoints.max_loc_strategy}")
+    if config.max_loc_strategy not in valid_max_loc_strategies:
+        raise ValueError(f"不支持的max_loc策略: {config.max_loc_strategy}")
     
     valid_evaluation_methods = [
         "inter_eye_distance", "visible", "mean_average_error", "pck", "orientation_invariant"
     ]
-    if config.evaluation.method not in valid_evaluation_methods:
-        raise ValueError(f"不支持的评估方法: {config.evaluation.method}")
+    if config.evaluation_method not in valid_evaluation_methods:
+        raise ValueError(f"不支持的评估方法: {config.evaluation_method}")
     
     # 验证设备可用性
-    if config.training.device.startswith("cuda") and not torch.cuda.is_available():
-        raise ValueError(f"CUDA设备不可用，但配置要求使用: {config.training.device}")
-
-
-def convert_config_to_args(config: DictConfig) -> argparse.Namespace:
-    """
-    将OmegaConf配置转换为与原始argparse兼容的Namespace对象
-    这是为了保持与现有代码的兼容性
-    
-    Args:
-        config: OmegaConf配置对象
-        
-    Returns:
-        argparse.Namespace对象，包含所有配置值
-    """
-    args = argparse.Namespace()
-    
-    # 模型配置
-    args.model_type = config.model.type
-    args.my_token = config.model.my_token
-    
-    # 数据集配置
-    args.dataset_name = config.dataset.name
-    args.dataset_loc = config.dataset.location
-    args.max_len = config.dataset.max_len
-    args.validation = config.dataset.validation
-    
-    # 训练配置
-    args.device = config.training.device
-    args.lr = config.training.lr
-    args.num_steps = config.training.num_steps
-    args.num_tokens = config.training.num_tokens
-    args.batch_size = config.training.batch_size
-    
-    # 特征配置
-    args.feature_upsample_res = config.features.upsample_res
-    args.layers = config.features.layers
-    args.noise_level = config.features.noise_level
-    
-    # 关键点配置
-    args.top_k = config.keypoints.top_k
-    args.top_k_strategy = config.keypoints.top_k_strategy
-    args.max_loc_strategy = config.keypoints.max_loc_strategy
-    args.min_dist = config.keypoints.min_dist
-    args.max_num_points = config.keypoints.max_num_points
-    args.num_indices = config.keypoints.num_indices
-    args.num_subjects = config.keypoints.num_subjects
-    args.sigma = config.keypoints.sigma
-    
-    # 损失权重
-    args.sharpening_loss_weight = config.loss.sharpening_weight
-    args.equivariance_attn_loss_weight = config.loss.equivariance_attn_weight
-    
-    # 数据增强
-    args.augment_degrees = config.augmentation.degrees
-    args.augment_scale = config.augmentation.scale
-    args.augment_translate = config.augmentation.translate
-    args.augmentation_iterations = config.augmentation.iterations
-    
-    # 评估
-    args.evaluation_method = config.evaluation.method
-    args.furthest_point_num_samples = config.evaluation.furthest_point_num_samples
-    
-    # 可视化
-    args.visualize = config.visualization.visualize
-    args.save_folder = config.visualization.save_folder
-    
-    # WandB
-    args.wandb = config.wandb.enabled
-    args.wandb_name = config.wandb.name
-    
-    return args
+    if config.device.startswith("cuda") and not torch.cuda.is_available():
+        raise ValueError(f"CUDA设备不可用，但配置要求使用: {config.device}")
 
 
 def create_config_parser() -> argparse.ArgumentParser:
@@ -241,24 +290,13 @@ def parse_overrides(override_list: Optional[list]) -> Dict[str, Any]:
     return overrides
 
 
-def get_default_config_path() -> str:
-    """
-    获取默认配置文件路径
-    
-    Returns:
-        默认配置文件的绝对路径
-    """
-    current_dir = Path(__file__).parent.parent
-    return str(current_dir / "configs" / "default.yaml")
-
-
-def setup_config() -> DictConfig:
+def setup_config() -> Config:
     """
     设置配置的主入口函数
     解析命令行参数，加载配置文件，应用覆盖，并进行验证
     
     Returns:
-        验证后的配置对象
+        验证后的强类型配置对象
     """
     parser = create_config_parser()
     cmd_args = parser.parse_args()
@@ -267,7 +305,10 @@ def setup_config() -> DictConfig:
     overrides = parse_overrides(cmd_args.override)
     
     # 加载配置
-    config = load_config(cmd_args.config, overrides)
+    dict_config = load_config(cmd_args.config, overrides)
+    
+    # 转换为强类型配置对象
+    config = Config.from_dict_config(dict_config)
     
     # 验证配置
     validate_config(config)

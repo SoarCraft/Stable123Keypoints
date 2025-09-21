@@ -5,7 +5,7 @@ import torch
 import numpy as np
 from unsupervised_keypoints.optimize_token import load_ldm
 from unsupervised_keypoints.optimize import optimize_embedding
-from unsupervised_keypoints.config_utils import setup_config, convert_config_to_args
+from unsupervised_keypoints.config_utils import setup_config
 
 from unsupervised_keypoints.keypoint_regressor import (
     find_best_indices,
@@ -19,60 +19,57 @@ from unsupervised_keypoints.eval import evaluate
 from unsupervised_keypoints.visualize import visualize_attn_maps
 
 
-# 配置管理 - 使用OmegaConf替代argparse
+# 配置管理 - 使用强类型配置类
 print("正在加载配置...")
 config = setup_config()
 print(f"已加载配置文件，数据集: {config.dataset.name}, 设备: {config.training.device}")
 
-# 为了保持与现有代码的兼容性，将配置转换为args对象
-args = convert_config_to_args(config)
+ldm, controllers, num_gpus = load_ldm(config.device, config.model_type, feature_upsample_res=config.feature_upsample_res, my_token=config.my_token)
 
-ldm, controllers, num_gpus = load_ldm(args.device, args.model_type, feature_upsample_res=args.feature_upsample_res, my_token=args.my_token)
-
-# if args.save_folder doesnt exist create it
-if not os.path.exists(args.save_folder):
-    os.makedirs(args.save_folder)
+# if config.save_folder doesnt exist create it
+if not os.path.exists(config.save_folder):
+    os.makedirs(config.save_folder)
     
 # print number of gpus
 print("Number of GPUs: ", torch.cuda.device_count())
 
-if args.wandb:
+if config.wandb:
     # start a wandb session
-    wandb.init(project="attention_maps", name=args.wandb_name, config=vars(args))
+    wandb.init(project="attention_maps", name=config.wandb_name, config=config.__dict__)
 
 # Stage 1: Optimize Embedding (runs unconditionally)
 embedding = optimize_embedding(
     ldm,
-    args,
+    config,
     controllers,
     num_gpus,
 )
-torch.save(embedding, os.path.join(args.save_folder, "embedding.pt"))
+torch.save(embedding, os.path.join(config.save_folder, "embedding.pt"))
     
 # Stage 2: Find Best Indices (runs unconditionally)
 indices = find_best_indices(
     ldm,
     embedding,
-    args,
+    config,
     controllers,
     num_gpus,
 )
-torch.save(indices, os.path.join(args.save_folder, "indices.pt"))
+torch.save(indices, os.path.join(config.save_folder, "indices.pt"))
     
-if args.visualize:
+if config.visualize:
     # Visualize embeddings after finding indices
     visualize_attn_maps(
         ldm,
         embedding,
         indices,
-        args,
+        config,
         controllers,
         num_gpus,
         # regressor is not available yet for the first visualization
     )
 
 # Check for custom dataset before precomputation
-if args.dataset_name == "custom":
+if config.dataset_name == "custom":
     print("Dataset is 'custom'. Skipping precomputation, regressor training, and evaluation stages.")
     # If you want to exit completely after visualization for custom datasets:
     # import sys
@@ -83,18 +80,18 @@ else:
         ldm,
         embedding,
         indices,
-        args,
+        config,
         controllers,
         num_gpus,
     )
 
-    torch.save(source_kpts, os.path.join(args.save_folder, "source_keypoints.pt"))
-    torch.save(target_kpts, os.path.join(args.save_folder, "target_keypoints.pt"))
+    torch.save(source_kpts, os.path.join(config.save_folder, "source_keypoints.pt"))
+    torch.save(target_kpts, os.path.join(config.save_folder, "target_keypoints.pt"))
     if visible is not None: # visible can be None
-        torch.save(visible, os.path.join(args.save_folder, "visible.pt"))
+        torch.save(visible, os.path.join(config.save_folder, "visible.pt"))
 
     # Stage 4: Train Regressor (runs if not custom dataset)
-    if args.evaluation_method == "visible" or args.evaluation_method == "mean_average_error":
+    if config.evaluation_method == "visible" or config.evaluation_method == "mean_average_error":
         if visible is None:
             # If visible is None from precompute (e.g. custom dataset didn't yield it, though we stop before this for custom)
             # or if a dataset type simply doesn't provide visibility.
@@ -110,7 +107,7 @@ else:
             target_kpts.cpu().numpy().reshape(target_kpts.shape[0], target_kpts.shape[1]*2).astype(np.float64),
             visible_reshaped,
         )
-    elif args.evaluation_method == "orientation_invariant":
+    elif config.evaluation_method == "orientation_invariant":
         regressor = return_regressor_human36m( 
             source_kpts.cpu().numpy().reshape(source_kpts.shape[0], source_kpts.shape[1]*2).astype(np.float64),
             target_kpts.cpu().numpy().reshape(target_kpts.shape[0], target_kpts.shape[1]*2).astype(np.float64),
@@ -121,18 +118,18 @@ else:
             target_kpts.cpu().numpy().reshape(target_kpts.shape[0], target_kpts.shape[1]*2).astype(np.float64),
         )
     regressor = torch.tensor(regressor).to(torch.float32)
-    torch.save(regressor, os.path.join(args.save_folder, "regressor.pt"))
+    torch.save(regressor, os.path.join(config.save_folder, "regressor.pt"))
 
-    if args.visualize:
+    if config.visualize:
         # Visualize with regressor (runs if not custom dataset and visualize is true)
         visualize_attn_maps(
             ldm,
             embedding,
             indices,
-            args,
+            config,
             controllers,
             num_gpus,
-            regressor=regressor.to(args.device),
+            regressor=regressor.to(config.device),
         )
 
     # Stage 5: Evaluate (runs if not custom dataset)
@@ -140,8 +137,8 @@ else:
         ldm,
         embedding,
         indices,
-        regressor.to(args.device),
-        args,
+        regressor.to(config.device),
+        config,
         controllers,
         num_gpus,
     )
