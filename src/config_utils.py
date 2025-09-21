@@ -20,7 +20,7 @@ class Config:
     
     # Dataset configuration
     dataset_name: str = "celeba_aligned"
-    dataset_location: str = "~"
+    dataset_loc: str = "~"
     max_len: int = -1
     validation: bool = False
     
@@ -67,6 +67,8 @@ class Config:
     # Wandb configuration
     wandb_enabled: bool = False
     wandb_name: str = "temp"
+    wandb_project: str = "stable-image-keypoints"
+    wandb_entity: Optional[str] = None
     
     def __post_init__(self):
         if self.layers is None:
@@ -86,7 +88,7 @@ class Config:
             
             # Dataset configuration
             dataset_name=dict_config.dataset.name,
-            dataset_location=dict_config.dataset.location,
+            dataset_loc=dict_config.dataset.location,
             max_len=dict_config.dataset.max_len,
             validation=dict_config.dataset.validation,
             
@@ -132,7 +134,9 @@ class Config:
             
             # Wandb configuration
             wandb_enabled=dict_config.wandb.enabled,
-            wandb_name=dict_config.wandb.name
+            wandb_name=dict_config.wandb.name,
+            wandb_project=dict_config.wandb.project,
+            wandb_entity=dict_config.wandb.entity
         )
 
 

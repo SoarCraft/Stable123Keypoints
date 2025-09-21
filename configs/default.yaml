@@ -62,5 +62,7 @@ visualization:
 
 # Weights & Biases配置
 wandb:
-  enabled: false # 是否启用wandb日志
-  name: "temp" # wandb运行名称
+  enabled: true # 是否启用wandb日志
+  name: "sk1.5" # wandb运行名称
+  project: "StableImageKeypoints" # wandb项目名称
+  entity: "aronfothi_org" # wandb组织名称（可选）

@@ -19,23 +19,25 @@ from src.eval import evaluate
 from src.visualize import visualize_attn_maps
 
 
-# 配置管理 - 使用强类型配置类
 print("正在加载配置...")
 config = setup_config()
-print(f"已加载配置文件，数据集: {config.dataset.name}, 设备: {config.training.device}")
+print(f"已加载配置文件，数据集: {config.dataset_name}, 设备: {config.device}")
 
 ldm, controllers, num_gpus = load_ldm(config.device, config.model_type, feature_upsample_res=config.feature_upsample_res, my_token=config.my_token)
 
 # if config.save_folder doesnt exist create it
 if not os.path.exists(config.save_folder):
     os.makedirs(config.save_folder)
-    
-# print number of gpus
-print("Number of GPUs: ", torch.cuda.device_count())
 
-if config.wandb:
+if config.wandb_enabled:
     # start a wandb session
-    wandb.init(project="attention_maps", name=config.wandb_name, config=config.__dict__)
+    wandb_init_kwargs = {
+        "project": config.wandb_project,
+        "name": config.wandb_name
+    }
+    if config.wandb_entity:
+        wandb_init_kwargs["entity"] = config.wandb_entity
+    wandb.init(**wandb_init_kwargs)
 
 # Stage 1: Optimize Embedding (runs unconditionally)
 embedding = optimize_embedding(
