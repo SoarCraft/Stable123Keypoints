@@ -103,7 +103,7 @@ def find_top_k_gaussian(attention_maps, top_k, sigma = 3, epsilon = 1e-5, num_su
     # get the argsort for kl_distances
     kl_distances_argsort = torch.argsort(kl_distances, dim=-1, descending=False)
     
-    return torch.tensor(kl_distances_argsort[:top_k]).to(device)
+    return kl_distances_argsort[:top_k].detach().clone().to(device)
 
 
 def furthest_point_sampling(attention_maps, top_k, top_initial_candidates):
