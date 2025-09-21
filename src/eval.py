@@ -449,12 +449,11 @@ def evaluate(
         )
 
         if i % 100 == 0:
-            print()
+            pass
         # Extract the 10 worst distances (and their indices) from the priority queue
 
     if config.wandb_enabled:
         wandb.log({"mean_distance": torch.mean(torch.stack(distances))})
-    print()
 
     # save argsorted all_values in torch
     torch.save(torch.tensor(all_values), os.path.join(config.save_folder, "all_errors.pt"))

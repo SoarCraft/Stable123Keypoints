@@ -212,6 +212,7 @@ def visualize_attn_maps(
         )
 
     if regressor is not None:
+        points = points.to(regressor.device)
         est_points = ((points.view(height * width, -1)-0.5) @ regressor)+0.5
 
         plot_point_correspondences(

@@ -15,11 +15,11 @@ dataset:
 
 # 训练相关配置
 training:
-  device: "cuda:0" # 使用的设备
+  device: "cuda" # 使用的设备
   lr: 0.005 # 学习率
-  num_steps: 500 # 优化步数
+  num_steps: 100 # 优化步数
   num_tokens: 500 # token数量
-  batch_size: 4 # 批处理大小
+  batch_size: 8 # 批处理大小
 
 # 特征相关配置
 features:
@@ -57,7 +57,7 @@ evaluation:
 
 # 可视化和日志配置
 visualization:
-  visualize: false # 是否可视化注意力图
+  visualize: true # 是否可视化注意力图
   save_folder: "outputs" # 保存可视化和检查点的位置
 
 # Weights & Biases配置
