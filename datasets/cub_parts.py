@@ -1,12 +1,4 @@
-"""
-Code adapted from: https://github.com/akanazawa/cmr/blob/master/data/cub.py
-MIT License
-
-Copyright (c) 2018 akanazawa
-"""
-
 import os.path as osp
-
 import cv2
 import math
 import numpy as np
@@ -15,7 +7,6 @@ import torch
 from PIL import Image
 from torch.utils.data import Dataset
 from torchvision import transforms
-
 from torchvision.transforms import functional as TF, InterpolationMode
 
 padding_frac = 0.05

@@ -3,7 +3,7 @@ import wandb
 import numpy as np
 import torch
 import numpy as np
-from src.optimize_token import load_ldm
+from src.optimize_token import load_model
 from src.optimize import optimize_embedding
 from src.config_utils import setup_config
 
@@ -23,7 +23,7 @@ print("正在加载配置...")
 config = setup_config()
 print(f"已加载配置文件，数据集: {config.dataset_name}, 设备: {config.device}")
 
-ldm, controllers, num_gpus = load_ldm(config.device, config.model_type, feature_upsample_res=config.feature_upsample_res, my_token=config.my_token)
+ldm, controllers, num_gpus = load_model(config.device, config.model_type, feature_upsample_res=config.feature_upsample_res, my_token=config.my_token)
 
 # if config.save_folder doesnt exist create it
 if not os.path.exists(config.save_folder):
