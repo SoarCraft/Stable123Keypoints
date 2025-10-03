@@ -233,22 +233,36 @@ def run_and_find_attn(
     return attention_maps
 
 
-def image2latent(model, image, device):
+def to_rgb_image(maybe_rgba: Image.Image):
+    if maybe_rgba.mode == 'RGB':
+        return maybe_rgba
+    elif maybe_rgba.mode == 'RGBA':
+        rgba = maybe_rgba
+        img = np.random.randint(127, 128, size=[rgba.size[1], rgba.size[0], 3], dtype=np.uint8)
+        img = Image.fromarray(img, 'RGB')
+        img.paste(rgba, mask=rgba.getchannel('A'))
+        return img
+    else:
+        raise ValueError("Unsupported image type.", maybe_rgba.mode)
+
+
+def image2latent(ldm, image):
     with torch.no_grad():
         if type(image) is Image:
-            image = np.array(image)
+            image = to_rgb_image(image)
+            image = ldm.feature_extractor_vae(images=image, return_tensors="pt").pixel_values
+
         if type(image) is torch.Tensor and image.dim() == 4:
             latents = image
         else:
-            # print the max and min values of the image
-            image = torch.from_numpy(image).float() * 2 - 1
-            image = image.permute(0, 3, 1, 2).to(device)
             with autocast():
-                if isinstance(model.vae, torch.nn.DataParallel):
-                    latents = model.vae.module.encode(image)["latent_dist"].mean
+                if isinstance(ldm.vae, torch.nn.DataParallel):
+                    latents = ldm.vae.module.encode(image).latent_dist.sample()
+                    latents = latents * ldm.vae.module.config.scaling_factor
                 else:
-                    latents = model.vae.encode(image)["latent_dist"].mean
-            latents = latents * 0.18215
+                    latents = ldm.vae.encode(image).latent_dist.sample()
+                    latents = latents * ldm.vae.config.scaling_factor
+            
     return latents
 
 
