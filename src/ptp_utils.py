@@ -2,6 +2,7 @@ import torch.distributions as dist
 import numpy as np
 import torch
 import torch.nn.functional as F
+from torch.amp import autocast
 import abc
 from src.eval import find_max_pixel, find_k_max_pixels
 from src import optimize_token
@@ -184,14 +185,13 @@ def find_pred_noise(
         latent, noise, ldm.scheduler.timesteps[noise_level]
     )
     
-    # import ipdb; ipdb.set_trace()
-
-    pred_noise = ldm.unet(noisy_image, 
-                          ldm.scheduler.timesteps[noise_level].repeat(noisy_image.shape[0]), 
-                          encoder_hidden_states=context.repeat(noisy_image.shape[0], 1, 1))["sample"]
+    with autocast():
+        pred_noise = ldm.unet(noisy_image, 
+                              ldm.scheduler.timesteps[noise_level].repeat(noisy_image.shape[0]), 
+                              encoder_hidden_states=context.repeat(noisy_image.shape[0], 1, 1))["sample"]
     
     return noise, pred_noise
-    
+
 
 def run_and_find_attn(
     ldm,
@@ -243,35 +243,12 @@ def image2latent(model, image, device):
             # print the max and min values of the image
             image = torch.from_numpy(image).float() * 2 - 1
             image = image.permute(0, 3, 1, 2).to(device)
-            if isinstance(model.vae, torch.nn.DataParallel):
-                latents = model.vae.module.encode(image)["latent_dist"].mean
-            else:
-                latents = model.vae.encode(image)["latent_dist"].mean
+            with autocast():
+                if isinstance(model.vae, torch.nn.DataParallel):
+                    latents = model.vae.module.encode(image)["latent_dist"].mean
+                else:
+                    latents = model.vae.encode(image)["latent_dist"].mean
             latents = latents * 0.18215
-    return latents
-
-
-def latent2image(vae, latents):
-    latents = 1 / 0.18215 * latents
-    image = vae.decode(latents)["sample"]
-    image = (image / 2 + 0.5).clamp(0, 1)
-    image = image.cpu().permute(0, 2, 3, 1).numpy()
-    image = (image * 255).astype(np.uint8)
-    return image
-
-
-def latent_step(model, controller, latents, context, t, guidance_scale, low_resource=True):
-    if low_resource:
-        # noise_pred_uncond = model.unet(latents, t, encoder_hidden_states=context[0])["sample"]
-        noise_prediction_text = model.unet(latents, t, encoder_hidden_states=context[1])["sample"]
-    else:
-        latents_input = torch.cat([latents] * 2)
-        noise_pred = model.unet(latents_input, t, encoder_hidden_states=context)["sample"]
-        noise_pred_uncond, noise_prediction_text = noise_pred.chunk(2)
-    # noise_pred = noise_pred_uncond + guidance_scale * (noise_prediction_text - noise_pred_uncond)
-    noise_pred = noise_prediction_text
-    latents = model.scheduler.step(noise_pred, t, latents)["prev_sample"]
-    latents = controller.step_callback(latents)
     return latents
 
 
@@ -283,6 +260,7 @@ def register_attention_control(model, controller, feature_upsample_res=256):
         else:
             to_out = self.to_out
 
+        @torch.autocast()
         def forward(hidden_states, encoder_hidden_states=None, attention_mask=None, **kwargs):
             batch_size, sequence_length, dim = hidden_states.shape
             h = self.heads
@@ -381,4 +359,4 @@ def register_attention_control(model, controller, feature_upsample_res=256):
 
 
 def init_random_noise(device, num_words=500):
-    return torch.randn(1, num_words, 768).to(device)
+    return torch.randn(1, num_words, 1024).to(device)

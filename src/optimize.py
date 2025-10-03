@@ -1,4 +1,4 @@
-# load the dataset
+import time
 import torch
 from tqdm import tqdm
 from src import ptp_utils
@@ -205,7 +205,6 @@ def optimize_embedding(
     optimizer = torch.optim.Adam([context], lr=config.lr)
 
     # time the optimization
-    import time
 
     start = time.time()
     it_start = time.time()
@@ -218,8 +217,6 @@ def optimize_embedding(
     dataloader = torch.utils.data.DataLoader(dataset, batch_size=num_gpus, shuffle=True, drop_last=True)
 
     dataloader_iter = iter(dataloader)
-    
-    # import ipdb; ipdb.set_trace()  
     
     for iteration in tqdm(range(int(int(config.num_steps)*(config.batch_size//num_gpus)))):
         
@@ -242,8 +239,6 @@ def optimize_embedding(
             device=config.device,
             controllers=controllers,
         )
-        
-        # import ipdb; ipdb.set_trace()
 
         transformed_img = invertible_transform(image)
 
@@ -285,14 +280,9 @@ def optimize_embedding(
                 attn_map[top_embedding_indices], attention_map_transformed[top_embedding_indices][None].repeat(num_gpus, 1, 1, 1), invertible_transform, index
             ))
         
-
-
         _sharpening_loss = torch.stack([loss.to('cuda:0') for loss in _sharpening_loss]).mean()
         _loss_equivariance_attn = torch.stack([loss.to('cuda:0') for loss in _loss_equivariance_attn]).mean()
-        
 
-        # use the old loss for the first 1000 iterations
-        # new loss is unstable for early iterations
         loss = (
             + _loss_equivariance_attn * config.equivariance_attn_loss_weight
             + _sharpening_loss * config.sharpening_loss_weight
@@ -305,6 +295,7 @@ def optimize_embedding(
         loss = loss / (config.batch_size//num_gpus)
 
         loss.backward()
+        
         if (iteration + 1) % (config.batch_size//num_gpus) == 0:
             optimizer.step()
             optimizer.zero_grad()
