@@ -1,24 +1,13 @@
 import torch
-from diffusers import StableDiffusionPipeline, DDIMScheduler
+from diffusers import DiffusionPipeline
 from src import ptp_utils
 import torch.nn as nn
 
 
-def load_model(device, type="sd-legacy/stable-diffusion-v1-5", feature_upsample_res=256, my_token=None):
-    scheduler = DDIMScheduler(
-        beta_start=0.00085,
-        beta_end=0.012,
-        beta_schedule="scaled_linear",
-        clip_sample=False,
-        set_alpha_to_one=False,
-        steps_offset=1
-    )
-
-    NUM_DDIM_STEPS = 50
-    scheduler.set_timesteps(NUM_DDIM_STEPS)
-
-    ldm = StableDiffusionPipeline.from_pretrained(
-        type, token=my_token, scheduler=scheduler
+def load_model(device, type="sudo-ai/zero123plus-v1.2", feature_upsample_res=128, my_token=None):
+    ldm = DiffusionPipeline.from_pretrained(
+        type, token=my_token, torch_dtype=torch.float16,
+        custom_pipeline="sudo-ai/zero123plus-pipeline",
     ).to(device)
     
     if device != "cpu":
@@ -38,13 +27,10 @@ def load_model(device, type="sd-legacy/stable-diffusion-v1-5", feature_upsample_
         controllers[_device] = controller
         effective_num_gpus = 1
 
-        # patched_devices = set()
-
     def hook_fn(module, input):
         _device = input[0].device
         # if device not in patched_devices:
         ptp_utils.register_attention_control(module, controllers[_device], feature_upsample_res=feature_upsample_res)
-        # patched_devices.add(device)
 
     if device != "cpu":
         ldm.unet.module.register_forward_pre_hook(hook_fn)

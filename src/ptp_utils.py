@@ -380,5 +380,5 @@ def register_attention_control(model, controller, feature_upsample_res=256):
     assert cross_att_count != 0, f"No cross-attention layers found in the model. Please check the model structure. Found {cross_att_count} cross-attention layers."
 
 
-def init_random_noise(device, num_words=77):
+def init_random_noise(device, num_words=500):
     return torch.randn(1, num_words, 768).to(device)
