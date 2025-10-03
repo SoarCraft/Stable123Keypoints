@@ -177,18 +177,20 @@ def find_pred_noise(
         image = image.permute(0, 2, 3, 1).detach().cpu().numpy()
 
     with torch.no_grad():
-        latent = image2latent(ldm, image, device)
+        cond_lat = image2latent(ldm, image, device)
         
-    noise = torch.randn_like(latent)
+    timestep = ldm.scheduler.timesteps[noise_level]
+    noise = torch.randn_like(cond_lat)
 
-    noisy_image = ldm.scheduler.add_noise(
-        latent, noise, ldm.scheduler.timesteps[noise_level]
+    noisy_latent = ldm.scheduler.add_noise(
+        cond_lat, noise, timestep
     )
     
     with autocast():
-        pred_noise = ldm.unet(noisy_image, 
-                              ldm.scheduler.timesteps[noise_level].repeat(noisy_image.shape[0]), 
-                              encoder_hidden_states=context.repeat(noisy_image.shape[0], 1, 1))["sample"]
+        pred_noise = ldm.unet(noisy_latent, 
+                              timestep.repeat(noisy_latent.shape[0]), 
+                              encoder_hidden_states=context.repeat(noisy_latent.shape[0], 1, 1),
+                              cross_attention_kwargs={"cond_lat": cond_lat})["sample"]
     
     return noise, pred_noise
 
