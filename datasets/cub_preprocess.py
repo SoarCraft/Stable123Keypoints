@@ -3,6 +3,7 @@ CUB数据集背景去除预处理工具
 递归处理data/CUB_200_2011/images目录中的所有图像，去除背景
 """
 
+import torch  # inuse: for CUDA
 import sys
 import re
 from pathlib import Path
@@ -101,7 +102,7 @@ def get_image_files(directory: Path) -> list[Path]:
 
 def process_cub_images(input_dir: str, 
                       output_dir: Optional[str] = None,
-                      model_name: str = 'birefnet-general',
+                      model_name: str = 'isnet-general-use',
                       overwrite: bool = False,
                       force_remove: bool = False,
                       delete_original: bool = True,
@@ -238,14 +239,14 @@ def main():
     )
     parser.add_argument(
         "-m", "--model", 
-        default="birefnet-general",
+        default="isnet-general-use",
         choices=[
             'u2net', 'u2netp', 'u2net_human_seg', 'u2net_cloth_seg', 
             'silueta', 'isnet-general-use', 'isnet-anime', 'sam',
             'birefnet-general', 'birefnet-general-lite', 'birefnet-portrait',
             'birefnet-dis', 'birefnet-hrsod', 'birefnet-cod', 'birefnet-massive'
         ],
-        help="rembg模型名称 (默认: birefnet-general)"
+        help="rembg模型名称 (默认: isnet-general-use)"
     )
     parser.add_argument(
         "--overwrite", 

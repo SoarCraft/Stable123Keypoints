@@ -3,7 +3,7 @@ from tqdm import tqdm
 from src import ptp_utils
 from datasets.celeba import CelebA
 from datasets import custom_images
-from datasets import cub
+from datasets import cub_aligned
 from datasets import cub_parts
 from datasets import taichi
 from datasets import human36m
@@ -28,7 +28,7 @@ def find_best_indices(
     elif config.dataset_name == "celeba_wild":
         dataset = CelebA(split="train", dataset_loc=config.dataset_loc, align = False)
     elif config.dataset_name == "cub_aligned":
-        dataset = cub.TrainSet(data_root=config.dataset_loc, image_size=512)
+        dataset = cub_aligned.TrainSet(data_root=config.dataset_loc, image_size=512)
     elif config.dataset_name == "cub_001":
         dataset = cub_parts.CUBDataset(dataset_root=config.dataset_loc, split="train", single_class=1)
     elif config.dataset_name == "cub_002":
@@ -122,7 +122,7 @@ def precompute_all_keypoints(
     elif config.dataset_name == "celeba_wild":
         dataset = CelebA(split="train", dataset_loc=config.dataset_loc, align = False)
     elif config.dataset_name == "cub_aligned":
-        dataset = cub.TrainRegSet(data_root=config.dataset_loc, image_size=512)
+        dataset = cub_aligned.TrainRegSet(data_root=config.dataset_loc, image_size=512)
     elif config.dataset_name == "cub_001":
         dataset = cub_parts.CUBDataset(dataset_root=config.dataset_loc, split="train", single_class=1)
     elif config.dataset_name == "cub_002":

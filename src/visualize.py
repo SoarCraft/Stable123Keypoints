@@ -4,7 +4,7 @@ import torch
 from tqdm import tqdm
 from datasets.celeba import CelebA
 from datasets import custom_images
-from datasets import cub
+from datasets import cub_aligned
 from datasets import cub_parts
 from datasets import taichi
 from datasets import human36m
@@ -135,7 +135,7 @@ def visualize_attn_maps(
     elif config.dataset_name == "celeba_wild":
         dataset = CelebA(split="test", dataset_loc=config.dataset_loc, align = False)
     elif config.dataset_name == "cub_aligned":
-        dataset = cub.TestSet(data_root=config.dataset_loc, image_size=512)
+        dataset = cub_aligned.TestSet(data_root=config.dataset_loc, image_size=512)
     elif config.dataset_name == "cub_001":
         dataset = cub_parts.CUBDataset(dataset_root=config.dataset_loc, split="test", single_class=1)
     elif config.dataset_name == "cub_002":
