@@ -43,6 +43,8 @@ def load_model(device, type="sudo-ai/zero123plus-v1.2", feature_upsample_res=128
         param.requires_grad = False
     for param in ldm.unet.parameters():
         param.requires_grad = False
+    for param in ldm.vision_encoder.parameters():
+        param.requires_grad = False
 
     return ldm, controllers, effective_num_gpus
 
@@ -53,7 +55,6 @@ def gaussian_circle(pos, size=64, sigma=16, device="cuda"):
     pos is in between 0 and 1 and has shape [batch_size, 2]
 
     """
-    batch_size = pos.shape[0]
     _pos = pos * size  # Shape [batch_size, 2]
     _pos = _pos.unsqueeze(1).unsqueeze(1)  # Shape [batch_size, 1, 1, 2]
 
