@@ -1,24 +1,26 @@
 import torch
-from diffusers import DiffusionPipeline, EulerAncestralDiscreteScheduler
+from diffusers import StableDiffusionPipeline, DDIMScheduler
 from src import ptp_utils
 import torch.nn as nn
 
 
 def load_model(device, type="sudo-ai/zero123plus-v1.2", feature_upsample_res=128, my_token=None):
-    ldm = DiffusionPipeline.from_pretrained(
-        type, token=my_token, torch_dtype=torch.float16,
-        custom_pipeline="sudo-ai/zero123plus-pipeline",
-    )
-    
-    ldm.scheduler = EulerAncestralDiscreteScheduler.from_config(
-        ldm.scheduler.config, timestep_spacing='trailing'
+    scheduler = DDIMScheduler(
+        beta_start=0.00085,
+        beta_end=0.012,
+        beta_schedule="scaled_linear",
+        clip_sample=False,
+        set_alpha_to_one=False,
+        steps_offset=1
     )
 
-    ldm.scheduler.set_timesteps(50)
+    NUM_DDIM_STEPS = 50
+    scheduler.set_timesteps(NUM_DDIM_STEPS)
 
-    ldm.to(device)
-    ldm.prepare()
-    
+    ldm = StableDiffusionPipeline.from_pretrained(
+        type, token=my_token, scheduler=scheduler
+    ).to(device)
+
     if device != "cpu":
         ldm.unet = nn.DataParallel(ldm.unet)
         ldm.vae = nn.DataParallel(ldm.vae)
@@ -42,17 +44,15 @@ def load_model(device, type="sudo-ai/zero123plus-v1.2", feature_upsample_res=128
         ptp_utils.register_attention_control(module, controllers[_device], feature_upsample_res=feature_upsample_res)
 
     if device != "cpu":
-        ldm.unet.module.unet.register_forward_pre_hook(hook_fn)
+        ldm.unet.module.register_forward_pre_hook(hook_fn)
     else:
-        ldm.unet.unet.register_forward_pre_hook(hook_fn)
+        ldm.unet.register_forward_pre_hook(hook_fn)
     
     for param in ldm.vae.parameters():
         param.requires_grad = False
     for param in ldm.text_encoder.parameters():
         param.requires_grad = False
     for param in ldm.unet.parameters():
-        param.requires_grad = False
-    for param in ldm.vision_encoder.parameters():
         param.requires_grad = False
 
     return ldm, controllers, effective_num_gpus

@@ -1,4 +1,3 @@
-import math
 import time
 import torch
 from tqdm import tqdm
@@ -47,20 +46,9 @@ def collect_maps(
         
         data = data.to(device)
 
-        if len(data.shape) == 4:
-            data = data.mean(dim=1)
-        
-        batch_size, seq_len, text_len = data.shape
-        
-        spatial_size = int(seq_len ** 0.5)
-        
-        if spatial_size * spatial_size != seq_len:
-            spatial_size = int(math.sqrt(seq_len))
-            actual_seq_len = spatial_size * spatial_size
-            data = data[:, :actual_seq_len, :]
-            seq_len = actual_seq_len
-
-        data = data.reshape(batch_size, spatial_size, spatial_size, text_len)
+        data = data.reshape(
+            data.shape[0], int(data.shape[1] ** 0.5), int(data.shape[1] ** 0.5), data.shape[2]
+        )
         
         if indices is not None:
             data = data[:, :, :, indices]
@@ -212,7 +200,7 @@ def optimize_embedding(
     context.requires_grad = True
 
     # optimize context to maximize attention at pixel_loc
-    optimizer = torch.optim.AdamW([context], lr=config.lr, weight_decay=1e-4)
+    optimizer = torch.optim.Adam([context], lr=config.lr)
 
     # time the optimization
     start = time.time()
@@ -304,7 +292,7 @@ def optimize_embedding(
         loss = loss / (config.batch_size//num_gpus)
 
         loss.backward()
-        
+
         if (iteration + 1) % (config.batch_size//num_gpus) == 0:
             optimizer.step()
             optimizer.zero_grad()
