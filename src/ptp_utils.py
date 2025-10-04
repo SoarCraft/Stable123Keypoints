@@ -219,7 +219,6 @@ def run_and_find_attn(
     attention_maps=[]
     
     for controller in controllers:
-
         _attention_maps = collect_maps(
             controllers[controller],
             from_where=from_where,
@@ -277,6 +276,7 @@ def register_attention_control(model, controller, feature_upsample_res=128):
             encoder_hidden_states=None,
             attention_mask=None,
             temb=None,
+            mode="w", ref_dict: dict = None, is_cfg_guidance = False,
             *args,
             **kwargs,
         ):

@@ -1,3 +1,4 @@
+import math
 import time
 import torch
 from tqdm import tqdm
@@ -46,12 +47,21 @@ def collect_maps(
         
         data = data.to(device)
 
-        data = data.reshape(
-            data.shape[0], int(data.shape[1] ** 0.5), int(data.shape[1] ** 0.5), data.shape[2]
-        )
+        if len(data.shape) == 4:
+            data = data.mean(dim=1)
         
-        # import ipdb; ipdb.set_trace()
+        batch_size, seq_len, text_len = data.shape
+        
+        spatial_size = int(seq_len ** 0.5)
+        
+        if spatial_size * spatial_size != seq_len:
+            spatial_size = int(math.sqrt(seq_len))
+            actual_seq_len = spatial_size * spatial_size
+            data = data[:, :actual_seq_len, :]
+            seq_len = actual_seq_len
 
+        data = data.reshape(batch_size, spatial_size, spatial_size, text_len)
+        
         if indices is not None:
             data = data[:, :, :, indices]
 
