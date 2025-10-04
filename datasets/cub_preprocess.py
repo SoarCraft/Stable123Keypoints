@@ -11,6 +11,7 @@ from typing import Any, Optional
 import argparse
 from tqdm import tqdm
 import PIL.Image
+import numpy as np
 import rembg
 
 
@@ -20,7 +21,7 @@ def remove_background(image: PIL.Image.Image,
                      **rembg_kwargs,
 ) -> PIL.Image.Image:
     """
-    去除图像背景
+    去除图像背景并用灰色填充
     
     Args:
         image: PIL图像对象
@@ -29,7 +30,7 @@ def remove_background(image: PIL.Image.Image,
         **rembg_kwargs: rembg其他参数
         
     Returns:
-        处理后的PIL图像对象
+        处理后的PIL图像对象（RGB模式，背景为灰色）
     """
     do_remove = True
     if image.mode == "RGBA" and image.getextrema()[3][0] < 255:
@@ -37,48 +38,19 @@ def remove_background(image: PIL.Image.Image,
     do_remove = do_remove or force
     if do_remove:
         image = rembg.remove(image, session=rembg_session, **rembg_kwargs)
-    return image
-
-
-def update_images_txt(input_dir: str) -> None:
-    """
-    更新images.txt文件，将所有.jpg扩展名改为.png
     
-    Args:
-        input_dir: 输入目录路径
-    """
-    input_path = Path(input_dir)
-    images_txt_path = input_path.parent / 'images.txt'
+    # 确保图像是RGBA模式
+    if image.mode != 'RGBA':
+        image = image.convert('RGBA')
     
-    if not images_txt_path.exists():
-        print(f"警告: 找不到images.txt文件: {images_txt_path}")
-        return
+    # 创建灰色背景
+    gray_bg = np.full((image.size[1], image.size[0], 3), 127, dtype=np.uint8)
+    gray_bg_image = PIL.Image.fromarray(gray_bg, 'RGB')
     
-    print(f"更新images.txt文件: {images_txt_path}")
+    # 将前景粘贴到灰色背景上
+    gray_bg_image.paste(image, (0, 0), image)
     
-    # 读取原文件内容
-    with open(images_txt_path, 'r', encoding='utf-8') as f:
-        lines = f.readlines()
-    
-    # 替换.jpg为.png
-    updated_lines = []
-    changes_count = 0
-    
-    for line in lines:
-        if '.jpg' in line.lower():
-            # 替换所有的.jpg为.png（忽略大小写）
-            updated_line = re.sub(r'\.jpe?g', '.png', line, flags=re.IGNORECASE)
-            updated_lines.append(updated_line)
-            if updated_line != line:
-                changes_count += 1
-        else:
-            updated_lines.append(line)
-    
-    # 写回文件
-    with open(images_txt_path, 'w', encoding='utf-8') as f:
-        f.writelines(updated_lines)
-    
-    print(f"已更新 {changes_count} 行记录，将.jpg扩展名改为.png")
+    return gray_bg_image
 
 
 def get_image_files(directory: Path) -> list[Path]:
@@ -104,11 +76,9 @@ def process_cub_images(input_dir: str,
                       output_dir: Optional[str] = None,
                       model_name: str = 'isnet-general-use',
                       overwrite: bool = False,
-                      force_remove: bool = False,
-                      delete_original: bool = True,
-                      update_txt: bool = True) -> None:
+                      force_remove: bool = False) -> None:
     """
-    处理CUB数据集图像，去除背景
+    处理CUB数据集图像，去除背景并用灰色填充
     
     Args:
         input_dir: 输入目录路径
@@ -116,22 +86,18 @@ def process_cub_images(input_dir: str,
         model_name: rembg模型名称
         overwrite: 是否覆盖已存在的文件
         force_remove: 是否强制去除背景
-        delete_original: 是否删除原始文件（当原始文件不是PNG格式时）
-        update_txt: 是否更新images.txt文件中的扩展名
     """
     input_path = Path(input_dir)
     
     if not input_path.exists():
         raise FileNotFoundError(f"输入目录不存在: {input_dir}")
     
-    # 设置输出目录
-    if output_dir:
-        output_path = Path(output_dir)
+    # 默认就地处理
+    in_place = output_dir is None
+    output_path = input_path if in_place else Path(output_dir)
+    
+    if not in_place:
         output_path.mkdir(parents=True, exist_ok=True)
-        in_place = False
-    else:
-        output_path = input_path
-        in_place = True
     
     # 初始化rembg会话
     print(f"初始化rembg模型: {model_name}")
@@ -166,55 +132,24 @@ def process_cub_images(input_dir: str,
                 skipped_count += 1
                 continue
             
-            # 读取图像
+            # 读取并处理图像
             with PIL.Image.open(image_file) as image:
-                # 如果不是就地处理且需要保持原始文件，则复制一份
-                if not in_place:
-                    processed_image = remove_background(
-                        image.copy(), 
-                        rembg_session=rembg_session, 
-                        force=force_remove
-                    )
-                else:
-                    processed_image = remove_background(
-                        image, 
-                        rembg_session=rembg_session, 
-                        force=force_remove
-                    )
+                # 去除背景并填充灰色
+                processed_image = remove_background(
+                    image, 
+                    rembg_session=rembg_session, 
+                    force=force_remove
+                )
                 
-                # 确定是否需要转换格式
-                original_is_png = image_file.suffix.lower() == '.png'
-                needs_format_conversion = not original_is_png
+                # 保存为JPG格式，直接覆盖原文件
+                processed_image.save(output_file, 'JPEG', quality=100)
                 
-                # 保存处理后的图像
-                # 确保以PNG格式保存以支持透明度
-                if output_file.suffix.lower() != '.png':
-                    output_file = output_file.with_suffix('.png')
-                
-                processed_image.save(output_file, 'PNG')
-                
-                # 如果需要删除原始文件且原始文件不是PNG格式
-                if delete_original and needs_format_conversion and in_place:
-                    try:
-                        # 删除原始文件（非PNG格式）
-                        if image_file.exists() and image_file != output_file:
-                            image_file.unlink()
-                    except Exception as e:
-                        print(f"删除原始文件 {image_file} 时出错: {str(e)}")
-
                 success_count += 1
                 
         except Exception as e:
             print(f"处理文件 {image_file} 时出错: {str(e)}")
             error_count += 1
             continue
-    
-    # 更新images.txt文件
-    if update_txt and in_place and success_count > 0:
-        try:
-            update_images_txt(input_dir)
-        except Exception as e:
-            print(f"更新images.txt文件时出错: {str(e)}")
     
     # 打印统计信息
     print(f"\n处理完成:")
@@ -258,17 +193,7 @@ def main():
         action="store_true",
         help="强制去除背景，即使图像已有透明通道"
     )
-    parser.add_argument(
-        "--no-delete-original", 
-        action="store_true",
-        help="不删除原始文件（默认会删除非PNG格式的原始文件）"
-    )
-    parser.add_argument(
-        "--no-update-txt", 
-        action="store_true",
-        help="不更新images.txt文件中的扩展名（默认会将.jpg改为.png）"
-    )
-    
+
     args = parser.parse_args()
     
     try:
@@ -277,9 +202,7 @@ def main():
             output_dir=args.output,
             model_name=args.model,
             overwrite=args.overwrite,
-            force_remove=args.force,
-            delete_original=not args.no_delete_original,
-            update_txt=not args.no_update_txt
+            force_remove=args.force
         )
     except KeyboardInterrupt:
         print("\n处理已被用户中断")
