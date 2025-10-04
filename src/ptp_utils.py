@@ -319,6 +319,7 @@ def register_attention_control(model, controller, feature_upsample_res=128):
             attention_mask=None,
             temb=None,
             *args,
+            mode="w", ref_dict: dict = None, is_cfg_guidance = False,
             **kwargs,
         ):
             residual = hidden_states
@@ -369,6 +370,7 @@ def register_attention_control(model, controller, feature_upsample_res=128):
             attention_probs = F.softmax(attention_scores, dim=-1)
             
             if (
+                mode != "w" and
                 is_cross and 
                 hidden_states.shape[1] <= 32**2 and 
                 len(self.controller.step_store["attn"]) < 3
@@ -476,11 +478,9 @@ def register_attention_control(model, controller, feature_upsample_res=128):
             place_in_unet = "unknown"
         
         if "attn2" in name and "up_blocks" in name:
-            controlled_proc = ControlledAttnProcessor2_0(
+            new_attn_procs[name] = ControlledAttnProcessor2_0(
                 controller, place_in_unet, feature_upsample_res
             )
-            processor.chained_proc = controlled_proc
-            new_attn_procs[name] = processor
             cross_att_count += 1
         else:
             new_attn_procs[name] = processor
