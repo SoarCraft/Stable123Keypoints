@@ -61,8 +61,8 @@ def load_model(device, type="sudo-ai/zero123plus-v1.2", feature_upsample_res=128
         param.requires_grad = False
     for param in ldm.unet.parameters():
         param.requires_grad = False
-    for param in ldm.vision_encoder.parameters():
-        param.requires_grad = False
+    # for param in ldm.vision_encoder.parameters():
+    #     param.requires_grad = False
 
     return ldm, controllers, effective_num_gpus
 

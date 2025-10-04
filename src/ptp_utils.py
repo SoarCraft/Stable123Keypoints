@@ -241,12 +241,8 @@ def image2latent(ldm, image, device):
         if type(image) is torch.Tensor and image.dim() == 4:
             latents = image
         else:
-            image = ldm.feature_extractor_vae(
-                images=torch.from_numpy(image).float(),
-                return_tensors="pt",
-                do_rescale=False
-                ).pixel_values
-            image = image.to(device)
+            image = torch.from_numpy(image).float() * 2 - 1
+            image = image.permute(0, 3, 1, 2).to(device)
 
             if isinstance(ldm.vae, torch.nn.DataParallel):
                 latents = ldm.vae.module.encode(image)["latent_dist"].mean
