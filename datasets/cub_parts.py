@@ -289,7 +289,7 @@ class CUBDataset(Dataset):
         sfm_pose[2] = quaternion_from_matrix(sfm_rot, isprecise=True)
 
         img_path = osp.join(self.img_dir, str(data.rel_path))
-        img_path = img_path.replace("jpg", "png")
+        # img_path = img_path.replace("jpg", "png")
         img = np.array(Image.open(img_path))
 
         # Some are grayscale:

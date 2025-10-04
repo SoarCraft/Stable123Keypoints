@@ -184,10 +184,10 @@ def find_pred_noise(
     noise = torch.randn_like(cond_lat)
 
     noisy_latent = ldm.scheduler.add_noise(
-        cond_lat, noise, timestep
+        cond_lat, noise, timestep.repeat(cond_lat.shape[0])
     )
     
-    with autocast(device):
+    with autocast(device, dtype=torch.float16):
         pred_noise = ldm.unet(noisy_latent, 
                               timestep.repeat(noisy_latent.shape[0]), 
                               encoder_hidden_states=context.repeat(noisy_latent.shape[0], 1, 1),
@@ -236,31 +236,22 @@ def run_and_find_attn(
     return attention_maps
 
 
-def to_rgb_image(maybe_rgba: Image.Image):
-    if maybe_rgba.mode == 'RGB':
-        return maybe_rgba
-    elif maybe_rgba.mode == 'RGBA':
-        rgba = maybe_rgba
-        img = np.random.randint(127, 128, size=[rgba.size[1], rgba.size[0], 3], dtype=np.uint8)
-        img = Image.fromarray(img, 'RGB')
-        img.paste(rgba, mask=rgba.getchannel('A'))
-        return img
-    else:
-        raise ValueError("Unsupported image type.", maybe_rgba.mode)
-
-
 def image2latent(ldm, image, device):
     with torch.no_grad():
         if type(image) is Image:
-            image = to_rgb_image(image)
-            image = ldm.feature_extractor_vae(images=image, return_tensors="pt").pixel_values
-            image = torch.from_numpy(image)
-            image = image.to(device)
+            image = np.array(image)
 
         if type(image) is torch.Tensor and image.dim() == 4:
             latents = image
         else:
-            with autocast(device):
+            image = ldm.feature_extractor_vae(
+                images=torch.from_numpy(image).float(),
+                return_tensors="pt",
+                do_rescale=False
+                ).pixel_values
+            image = image.to(device)
+
+            with autocast(device, dtype=torch.float16):
                 if isinstance(ldm.vae, torch.nn.DataParallel):
                     latents = ldm.vae.module.encode(image)["latent_dist"].mean
                     latents = latents * ldm.vae.module.config.scaling_factor
