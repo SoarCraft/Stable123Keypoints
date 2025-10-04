@@ -287,7 +287,7 @@ def register_attention_control(model, controller, feature_upsample_res=256):
             if (
                 is_cross
                 and sequence_length <= 32**2
-                and len(controller.step_store["attn"]) < 4
+                and len(controller.step_store["attn"]) < 3
             ):
                 x_reshaped = hidden_states.reshape(
                     batch_size,

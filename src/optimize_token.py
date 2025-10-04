@@ -18,7 +18,8 @@ def load_model(device, type="sudo-ai/zero123plus-v1.2", feature_upsample_res=128
     scheduler.set_timesteps(NUM_DDIM_STEPS)
 
     ldm = StableDiffusionPipeline.from_pretrained(
-        type, token=my_token, scheduler=scheduler
+        type, token=my_token, scheduler=scheduler,
+        custom_pipeline="sudo-ai/zero123plus-pipeline",
     ).to(device)
 
     if device != "cpu":
