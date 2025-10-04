@@ -276,7 +276,6 @@ def register_attention_control(model, controller, feature_upsample_res=128):
             encoder_hidden_states=None,
             attention_mask=None,
             temb=None,
-            mode="w", ref_dict: dict = None, is_cfg_guidance = False,
             *args,
             **kwargs,
         ):
@@ -435,15 +434,16 @@ def register_attention_control(model, controller, feature_upsample_res=128):
             place_in_unet = "unknown"
         
         if "attn2" in name and "up_blocks" in name:
-            new_attn_procs[name] = ControlledAttnProcessor2_0(
+            controlled_proc = ControlledAttnProcessor2_0(
                 controller, place_in_unet, feature_upsample_res
             )
+            processor.chained_proc = controlled_proc
+            new_attn_procs[name] = processor
             cross_att_count += 1
         else:
             new_attn_procs[name] = processor
     
     model.set_attn_processor(new_attn_procs)
-    
     controller.num_att_layers = cross_att_count
     
     assert cross_att_count != 0, f"No cross-attention layers found in the model. Please check the model structure. Found {cross_att_count} cross-attention layers."
