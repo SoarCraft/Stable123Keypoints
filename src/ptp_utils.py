@@ -8,6 +8,7 @@ from src.eval import find_max_pixel, find_k_max_pixels
 from src import optimize_token
 from PIL import Image
 from src.optimize import collect_maps
+from diffusers.models.attention_processor import AttnProcessor2_0
 
 
 class AttentionControl(abc.ABC):
@@ -83,7 +84,7 @@ def find_top_k_gaussian(attention_maps, top_k, sigma = 3, epsilon = 1e-5, num_su
     target = optimize_token.gaussian_circles(max_pixel_locations, size=image_h, sigma=sigma, device=attention_maps.device)
     
     target = target.reshape(batch_size, image_h * image_w)+epsilon
-    target/=target.sum(dim=-1, keepdim=True)
+    target /= target.sum(dim=-1, keepdim=True)
 
     # sort the kl distances between attention_maps_softmax and target
     kl_distances = torch.sum(target * (torch.log(target) - torch.log(attention_maps_softmax)), dim=-1)
@@ -268,79 +269,151 @@ def image2latent(ldm, image):
     return latents
 
 
-def register_attention_control(model, controller, feature_upsample_res=256):
-    def ca_forward(self, place_in_unet):
-        to_out = self.to_out
-        if type(to_out) is torch.nn.modules.container.ModuleList:
-            to_out = self.to_out[0]
-        else:
-            to_out = self.to_out
-
-        @torch.autocast()
-        def forward(hidden_states, encoder_hidden_states=None, attention_mask=None, **kwargs):
-            batch_size, sequence_length, dim = hidden_states.shape
-            h = self.heads
-            q = self.to_q(hidden_states)
-            is_cross = encoder_hidden_states is not None
-
-            encoder_hidden_states = encoder_hidden_states if is_cross else hidden_states
-            k = self.to_k(encoder_hidden_states)
-            v = self.to_v(encoder_hidden_states)
-            q = self.head_to_batch_dim(q)
-            k = self.head_to_batch_dim(k)
-            v = self.head_to_batch_dim(v)
-
-            sim = torch.einsum("b i d, b j d -> b i j", q, k) * self.scale
-            # sim = torch.matmul(q, k.permute(0, 2, 1)) * self.scale
-
-            if attention_mask is not None:
-                attention_mask = attention_mask.reshape(batch_size, -1)
-                max_neg_value = -torch.finfo(sim.dtype).max
-                attention_mask = attention_mask[:, None, :].repeat(h, 1, 1)
-                sim = sim.masked_fill(~attention_mask, max_neg_value)
-
-            # attention, what we cannot get enough of
-            attn = torch.nn.Softmax(dim=-1)(sim)
-            attn = attn.clone()
+def register_attention_control(model, controller, feature_upsample_res=128):
+    class ControlledAttnProcessor2_0(AttnProcessor2_0):
+        def __init__(self, controller, place_in_unet, feature_upsample_res=128):
+            super().__init__()
+            self.controller = controller
+            self.place_in_unet = place_in_unet
+            self.feature_upsample_res = feature_upsample_res
             
-            out = torch.matmul(attn, v)
+        def __call__(
+            self,
+            attn,
+            hidden_states,
+            encoder_hidden_states=None,
+            attention_mask=None,
+            temb=None,
+            *args,
+            **kwargs,
+        ):
+            residual = hidden_states
 
+            if attn.spatial_norm is not None:
+                hidden_states = attn.spatial_norm(hidden_states, temb)
+
+            input_ndim = hidden_states.ndim
+
+            if input_ndim == 4:
+                batch_size, channel, height, width = hidden_states.shape
+                hidden_states = hidden_states.view(batch_size, channel, height * width).transpose(1, 2)
+
+            batch_size, sequence_length, _ = (
+                hidden_states.shape if encoder_hidden_states is None else encoder_hidden_states.shape
+            )
+            
+            if attention_mask is not None:
+                attention_mask = attn.prepare_attention_mask(attention_mask, sequence_length, batch_size)
+                attention_mask = attention_mask.view(batch_size, attn.heads, -1, attention_mask.shape[-1])
+
+            if attn.group_norm is not None:
+                hidden_states = attn.group_norm(hidden_states.transpose(1, 2)).transpose(1, 2)
+
+            query = attn.to_q(hidden_states)
+
+            is_cross = encoder_hidden_states is not None
+            if encoder_hidden_states is None:
+                encoder_hidden_states = hidden_states
+            elif attn.norm_cross:
+                encoder_hidden_states = attn.norm_encoder_hidden_states(encoder_hidden_states)
+
+            key = attn.to_k(encoder_hidden_states)
+            value = attn.to_v(encoder_hidden_states)
+
+            inner_dim = key.shape[-1]
+            head_dim = inner_dim // attn.heads
+
+            query = query.view(batch_size, -1, attn.heads, head_dim).transpose(1, 2)
+            key = key.view(batch_size, -1, attn.heads, head_dim).transpose(1, 2)
+            value = value.view(batch_size, -1, attn.heads, head_dim).transpose(1, 2)
+
+            attention_scores = torch.matmul(query, key.transpose(-2, -1)) * attn.scale
+            
+            if attention_mask is not None:
+                attention_scores = attention_scores + attention_mask
+
+            attention_probs = F.softmax(attention_scores, dim=-1)
+            
             if (
-                is_cross
-                and sequence_length <= 32**2
-                and len(controller.step_store["attn"]) < 4
+                is_cross and 
+                hidden_states.shape[1] <= 32**2 and 
+                len(self.controller.step_store["attn"]) < 3
             ):
-                x_reshaped = hidden_states.reshape(
-                    batch_size,
-                    int(sequence_length**0.5),
-                    int(sequence_length**0.5),
-                    dim,
-                ).permute(0, 3, 1, 2)
-                # upsample to feature_upsample_res**2
-                x_reshaped = (
-                    F.interpolate(
-                        x_reshaped,
-                        size=(feature_upsample_res, feature_upsample_res),
+                hidden_seq_len = hidden_states.shape[1]
+                sqrt_seq_len = int(hidden_seq_len**0.5)
+                
+                if sqrt_seq_len * sqrt_seq_len == hidden_seq_len:
+                    x_reshaped = hidden_states.reshape(
+                        batch_size,
+                        sqrt_seq_len,
+                        sqrt_seq_len,
+                        hidden_states.shape[-1],
+                    ).permute(0, 3, 1, 2)
+                    
+                    x_reshaped = (
+                        F.interpolate(
+                            x_reshaped,
+                            size=(self.feature_upsample_res, self.feature_upsample_res),
+                            mode="bicubic",
+                            align_corners=False,
+                        )
+                        .permute(0, 2, 3, 1)
+                        .reshape(batch_size, -1, hidden_states.shape[-1])
+                    )
+
+                    q_upsampled = attn.to_q(x_reshaped)
+                    q_upsampled = q_upsampled.view(batch_size, -1, attn.heads, head_dim).transpose(1, 2)
+
+                    attn_scores_upsampled = torch.matmul(q_upsampled, key.transpose(-2, -1)) * attn.scale
+                    attn_probs_upsampled = F.softmax(attn_scores_upsampled, dim=-1)
+                    
+                    attention_probs = self.controller(
+                        {"attn": attn_probs_upsampled}, 
+                        is_cross, 
+                        self.place_in_unet
+                    )
+                    
+                    upsampled_output = torch.matmul(attention_probs, value)
+                    
+                    upsampled_output = upsampled_output.transpose(1, 2).reshape(batch_size, -1, attn.heads * head_dim)
+                    upsampled_h = upsampled_w = self.feature_upsample_res
+                    upsampled_output_reshaped = upsampled_output.reshape(
+                        batch_size, upsampled_h, upsampled_w, -1
+                    ).permute(0, 3, 1, 2)
+                    
+                    downsampled_output = F.interpolate(
+                        upsampled_output_reshaped,
+                        size=(sqrt_seq_len, sqrt_seq_len),
                         mode="bicubic",
                         align_corners=False,
+                    ).permute(0, 2, 3, 1).reshape(batch_size, hidden_seq_len, -1)
+                    
+                    hidden_states = downsampled_output.view(batch_size, hidden_seq_len, attn.heads, head_dim).transpose(1, 2)
+                else:
+                    attention_probs = self.controller(
+                        {"attn": attention_probs}, 
+                        is_cross, 
+                        self.place_in_unet
                     )
-                    .permute(0, 2, 3, 1)
-                    .reshape(batch_size, -1, dim)
-                )
+                    hidden_states = torch.matmul(attention_probs, value)
+            else:
+                hidden_states = torch.matmul(attention_probs, value)
+            
+            hidden_states = hidden_states.transpose(1, 2).reshape(batch_size, -1, attn.heads * head_dim)
+            hidden_states = hidden_states.to(query.dtype)
 
-                q = self.to_q(x_reshaped)
-                q = self.head_to_batch_dim(q)
+            hidden_states = attn.to_out[0](hidden_states)
+            hidden_states = attn.to_out[1](hidden_states)
 
-                sim = torch.einsum("b i d, b j d -> b i j", q, k) * self.scale
-                attn = torch.nn.Softmax(dim=-1)(sim)
-                attn = attn.clone()
+            if input_ndim == 4:
+                hidden_states = hidden_states.transpose(-1, -2).reshape(batch_size, channel, height, width)
 
-                attn = controller({"attn": attn}, is_cross, place_in_unet)
+            if attn.residual_connection:
+                hidden_states = hidden_states + residual
 
-            out = self.batch_to_head_dim(out)
-            return to_out(out)
+            hidden_states = hidden_states / attn.rescale_output_factor
 
-        return forward
+            return hidden_states
 
     class DummyController:
         def __call__(self, *args):
@@ -348,27 +421,36 @@ def register_attention_control(model, controller, feature_upsample_res=256):
 
         def __init__(self):
             self.num_att_layers = 0
+            self.step_store = {"attn": []}
 
     if controller is None:
         controller = DummyController()
 
-    def register_recr(net_, count, place_in_unet):
-        if net_.__class__.__name__ == "Attention":
-            is_cross_attention = getattr(net_, 'is_cross_attention', False)
-            if is_cross_attention:
-                net_.forward = ca_forward(net_, place_in_unet)
-                return count + 1
-        elif hasattr(net_, "children"):
-            for net__ in net_.children():
-                count = register_recr(net__, count, place_in_unet)
-        return count
-
+    attn_procs = model.attn_processors
+    new_attn_procs = {}
+    
     cross_att_count = 0
-    sub_nets = model.named_children()
-    for net in sub_nets:
-        if "up" in net[0]:
-            cross_att_count += register_recr(net[1], 0, "up")
-
+    
+    for name, processor in attn_procs.items():
+        if "down_blocks" in name:
+            place_in_unet = "down"
+        elif "mid_block" in name:
+            place_in_unet = "mid"  
+        elif "up_blocks" in name:
+            place_in_unet = "up"
+        else:
+            place_in_unet = "unknown"
+        
+        if "attn2" in name and "up_blocks" in name:
+            new_attn_procs[name] = ControlledAttnProcessor2_0(
+                controller, place_in_unet, feature_upsample_res
+            )
+            cross_att_count += 1
+        else:
+            new_attn_procs[name] = processor
+    
+    model.set_attn_processor(new_attn_procs)
+    
     controller.num_att_layers = cross_att_count
     
     assert cross_att_count != 0, f"No cross-attention layers found in the model. Please check the model structure. Found {cross_att_count} cross-attention layers."
