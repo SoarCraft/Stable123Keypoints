@@ -1,17 +1,30 @@
 import torch
-from diffusers import StableDiffusionPipeline
+from diffusers import StableDiffusionPipeline, DDIMScheduler
 from src import ptp_utils
 import torch.nn as nn
 
 
 def load_model(device, type="sudo-ai/zero123plus-v1.2", feature_upsample_res=128, my_token=None):
+    scheduler = DDIMScheduler(
+        beta_start=0.00085,
+        beta_end=0.012,
+        beta_schedule="scaled_linear",
+        clip_sample=False,
+        set_alpha_to_one=False,
+        steps_offset=1
+    )
+
+    NUM_DDIM_STEPS = 50
+    scheduler.set_timesteps(NUM_DDIM_STEPS)
+
     ldm = StableDiffusionPipeline.from_pretrained(
         type, token=my_token,
-        custom_pipeline="sudo-ai/zero123plus-pipeline",
+        scheduler=scheduler,
+        # custom_pipeline="sudo-ai/zero123plus-pipeline",
     ).to(device)
 
-    ldm.scheduler.set_timesteps(50)
-    ldm.prepare()
+    # ldm.scheduler.set_timesteps(50)
+    # ldm.prepare()
 
     if device != "cpu":
         ldm.unet = nn.DataParallel(ldm.unet)
@@ -36,9 +49,11 @@ def load_model(device, type="sudo-ai/zero123plus-v1.2", feature_upsample_res=128
         ptp_utils.register_attention_control(module, controllers[_device], feature_upsample_res=feature_upsample_res)
 
     if device != "cpu":
-        ldm.unet.module.unet.register_forward_pre_hook(hook_fn)
+        # ldm.unet.module.unet.register_forward_pre_hook(hook_fn)
+        ldm.unet.module.register_forward_pre_hook(hook_fn)
     else:
-        ldm.unet.unet.register_forward_pre_hook(hook_fn)
+        # ldm.unet.unet.register_forward_pre_hook(hook_fn)
+        ldm.unet.register_forward_pre_hook(hook_fn)
     
     for param in ldm.vae.parameters():
         param.requires_grad = False
