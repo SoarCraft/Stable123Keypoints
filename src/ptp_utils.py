@@ -187,7 +187,7 @@ def find_pred_noise(
         cond_lat, noise, timestep
     )
     
-    with autocast():
+    with autocast(device):
         pred_noise = ldm.unet(noisy_latent, 
                               timestep.repeat(noisy_latent.shape[0]), 
                               encoder_hidden_states=context.repeat(noisy_latent.shape[0], 1, 1),
@@ -249,21 +249,23 @@ def to_rgb_image(maybe_rgba: Image.Image):
         raise ValueError("Unsupported image type.", maybe_rgba.mode)
 
 
-def image2latent(ldm, image):
+def image2latent(ldm, image, device):
     with torch.no_grad():
         if type(image) is Image:
             image = to_rgb_image(image)
             image = ldm.feature_extractor_vae(images=image, return_tensors="pt").pixel_values
+            image = torch.from_numpy(image)
+            image = image.to(device)
 
         if type(image) is torch.Tensor and image.dim() == 4:
             latents = image
         else:
-            with autocast():
+            with autocast(device):
                 if isinstance(ldm.vae, torch.nn.DataParallel):
-                    latents = ldm.vae.module.encode(image).latent_dist.sample()
+                    latents = ldm.vae.module.encode(image)["latent_dist"].mean
                     latents = latents * ldm.vae.module.config.scaling_factor
                 else:
-                    latents = ldm.vae.encode(image).latent_dist.sample()
+                    latents = ldm.vae.encode(image)["latent_dist"].mean
                     latents = latents * ldm.vae.config.scaling_factor
             
     return latents
