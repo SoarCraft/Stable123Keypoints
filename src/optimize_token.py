@@ -1,5 +1,5 @@
 import torch
-from diffusers import DiffusionPipeline
+from diffusers import DiffusionPipeline, EulerAncestralDiscreteScheduler
 from src import ptp_utils
 import torch.nn as nn
 
@@ -8,8 +8,15 @@ def load_model(device, type="sudo-ai/zero123plus-v1.2", feature_upsample_res=128
     ldm = DiffusionPipeline.from_pretrained(
         type, token=my_token, torch_dtype=torch.float16,
         custom_pipeline="sudo-ai/zero123plus-pipeline",
-    ).to(device)
+    )
+    
+    ldm.scheduler = EulerAncestralDiscreteScheduler.from_config(
+        ldm.scheduler.config, timestep_spacing='trailing'
+    )
 
+    ldm.scheduler.set_timesteps(50)
+
+    ldm.to(device)
     ldm.prepare()
     
     if device != "cpu":
