@@ -33,9 +33,9 @@ def load_model(device, type="sudo-ai/zero123plus-v1.2", feature_upsample_res=128
         ptp_utils.register_attention_control(module, controllers[_device], feature_upsample_res=feature_upsample_res)
 
     if device != "cpu":
-        ldm.unet.module.register_forward_pre_hook(hook_fn)
+        ldm.unet.module.unet.register_forward_pre_hook(hook_fn)
     else:
-        ldm.unet.register_forward_pre_hook(hook_fn)
+        ldm.unet.unet.register_forward_pre_hook(hook_fn)
     
     for param in ldm.vae.parameters():
         param.requires_grad = False
