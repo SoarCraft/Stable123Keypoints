@@ -177,9 +177,24 @@ def find_pred_noise(
     if type(image) == torch.Tensor:
         image = image.permute(0, 2, 3, 1).detach().cpu().numpy()
 
-    with torch.no_grad():
-        cond_lat = image2latent(ldm, image, device)
-        
+    cond_lat = image2latent(ldm, image, device)
+    global_embeds = image2clip(ldm, image, device)
+
+    ramp_list = ldm.config.ramping_coefficients                        # 长度 77
+    T = context.shape[1]                                               # num_tokens 例如 500
+    ramp = torch.tensor(ramp_list, device=device, dtype=context.dtype)
+
+    # 扩到与 token 数 T 一致
+    if ramp.numel() < T:
+        ramp = torch.cat([ramp, torch.zeros(T - ramp.numel(), device=device, dtype=context.dtype)], dim=0)
+    elif ramp.numel() > T:
+        ramp = ramp[:T]
+
+    ramp = ramp.view(1, T, 1)
+    
+    ge = global_embeds.to(dtype=context.dtype).unsqueeze(1)            # (B, 1, D)
+    encoder_hidden_states = context + ge * ramp                        # (B, T, D) 其中 context 会按 batch broadcast
+
     timestep = ldm.scheduler.timesteps[noise_level]
     noise = torch.randn_like(cond_lat)
 
@@ -190,7 +205,7 @@ def find_pred_noise(
     with autocast(device, dtype=torch.float16):
         pred_noise = ldm.unet(noisy_latent, 
                               timestep.repeat(noisy_latent.shape[0]), 
-                              encoder_hidden_states=context.repeat(noisy_latent.shape[0], 1, 1),
+                              encoder_hidden_states=encoder_hidden_states,
                               cross_attention_kwargs={"cond_lat": cond_lat})["sample"]
     
     return noise, pred_noise
@@ -233,6 +248,33 @@ def run_and_find_attn(
         controllers[controller].reset()
         
     return attention_maps
+
+
+def image2clip(ldm, image, device):
+    """
+    将 numpy 或 torch 图像转为 Zero123++ 使用的 CLIP 视觉 pixel_values。
+    形状：(B, 3, Hc, Wc)，与 ldm.feature_extractor_clip 对齐。
+    """
+    with torch.no_grad():
+        if isinstance(image, torch.Tensor):
+            # image 在 find_pred_noise 前被 permute 成 (B,H,W,C) 的 np
+            img_np = image.permute(0, 2, 3, 1).detach().cpu().numpy()
+        else:
+            img_np = image
+
+        pixel = ldm.feature_extractor_clip(
+            images=torch.from_numpy(img_np).float(),
+            return_tensors="pt",
+            do_rescale=False
+        ).pixel_values
+
+        pixel = pixel.to(device)
+
+        with autocast(device, dtype=torch.float16):
+            encoded = ldm.vision_encoder(pixel, output_hidden_states=False)
+            global_embeds = encoded.image_embeds
+        
+    return global_embeds
 
 
 def image2latent(ldm, image, device):
