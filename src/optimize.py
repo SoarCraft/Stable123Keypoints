@@ -1,3 +1,4 @@
+import math
 import time
 import torch
 from tqdm import tqdm
@@ -46,9 +47,20 @@ def collect_maps(
         
         data = data.to(device)
 
-        data = data.reshape(
-            data.shape[0], int(data.shape[1] ** 0.5), int(data.shape[1] ** 0.5), data.shape[2]
-        )
+        if len(data.shape) == 4:
+            data = data.mean(dim=1)
+
+        batch_size, seq_len, text_len = data.shape
+        
+        spatial_size = int(seq_len ** 0.5)
+        
+        if spatial_size * spatial_size != seq_len:
+            spatial_size = int(math.sqrt(seq_len))
+            actual_seq_len = spatial_size * spatial_size
+            data = data[:, :actual_seq_len, :]
+            seq_len = actual_seq_len
+
+        data = data.reshape(batch_size, spatial_size, spatial_size, text_len)
         
         if indices is not None:
             data = data[:, :, :, indices]
@@ -65,7 +77,6 @@ def collect_maps(
             )
 
         attention_maps_list.append(data)
-
 
     attention_maps_list = torch.stack(attention_maps_list, dim=0).mean(dim=(0, 1))
 
@@ -200,7 +211,7 @@ def optimize_embedding(
     context.requires_grad = True
 
     # optimize context to maximize attention at pixel_loc
-    optimizer = torch.optim.Adam([context], lr=config.lr)
+    optimizer = torch.optim.AdamW([context], lr=config.lr, weight_decay=1e-4)
 
     # time the optimization
     start = time.time()
@@ -211,7 +222,7 @@ def optimize_embedding(
     running_total_loss = 0
     
     # create dataloader for the dataset
-    dataloader = torch.utils.data.DataLoader(dataset, batch_size=num_gpus, shuffle=True, drop_last=True)
+    dataloader = torch.utils.data.DataLoader(dataset, batch_size=num_gpus, shuffle=True, drop_last=True, num_workers=num_gpus, pin_memory=True)
 
     dataloader_iter = iter(dataloader)
     

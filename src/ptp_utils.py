@@ -181,7 +181,7 @@ def find_pred_noise(
     noise = torch.randn_like(latent)
 
     noisy_image = ldm.scheduler.add_noise(
-        latent, noise, ldm.scheduler.timesteps[noise_level]
+        latent, noise, ldm.scheduler.timesteps[noise_level].repeat(latent.shape[0])
     )
     
     pred_noise = ldm.unet(noisy_image, 
