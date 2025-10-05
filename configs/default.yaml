@@ -3,7 +3,7 @@
 
 # 模型相关配置
 model:
-  type: "sudo-ai/zero123plus-v1.2" # LDM模型类型
+  type: "sd-legacy/stable-diffusion-v1-5" # LDM模型类型
   my_token: null # Hugging Face token（可选）
 
 # 数据集相关配置
@@ -63,6 +63,6 @@ visualization:
 # Weights & Biases配置
 wandb:
   enabled: true # 是否启用wandb日志
-  name: "sk123" # wandb运行名称
+  name: "sk1.5" # wandb运行名称
   project: "Stable123Keypoints" # wandb项目名称
   entity: "aronfothi_org" # wandb组织名称（可选）

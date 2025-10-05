@@ -445,4 +445,4 @@ def register_attention_control(model, controller, feature_upsample_res=128):
 
 
 def init_random_noise(device, num_words=500):
-    return torch.randn(1, num_words, 1024).to(device)
+    return torch.randn(1, num_words, 768).to(device)
