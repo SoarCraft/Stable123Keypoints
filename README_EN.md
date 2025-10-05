@@ -1,30 +1,24 @@
-# Stable123Keypoints PoC
+# Stable123Keypoints Stage1
 
-A proof-of-concept project for keypoint extraction based on the Zero123Plus model.
+English | [简体中文](README.md)
+
+Keypoint Extraction Exploration Project Based on Zero123Plus Model - Stage 1 Research Report.
 
 ## Project Overview
 
-Stable123Keypoints is currently a proof-of-concept project aimed at performing image keypoint extraction using the `sudo-ai/zero123plus-v1.2` model. This project explores the potential application of `Zero123Plus` model weights in keypoint detection tasks.
+Stable123Keypoints aims to explore the application potential of the `sudo-ai/zero123plus-v1.2` model in keypoint detection tasks. This stage focuses on evaluating the direct usability of Zero123Plus pre-trained weights under the same architecture as [StableImageKeypoints v1.5](https://github.com/Aloento/StableImageKeypoints/blob/v1.5/README_EN.md).
 
-## Technical Background
+## Experimental Design
 
-### Core Findings
+### Testing Protocol
 
-Research has found that the pre-trained weights of the `Zero123Plus` model can successfully reproduce the keypoint extraction effects of the [StableImageKeypoints](https://github.com/Aloento/StableImageKeypoints/blob/v1.5/README_EN.md) project.
-
-### Implementation Strategy
-
-- **Fully load** the `Zero123Plus Pipeline` with targeted adaptations
-- **Selectively disable** features specific to `Zero123Plus`, including but not limited to:
-  - Visual global embeddings
-  - Classifier-free guidance
-  - Reference image attention mechanisms
-
-### Architecture Explanation
-
-Although theoretically the same effect could be achieved by making minor modifications based on `StableImageKeypoints`, considering the long-term development goals of the project, we chose to load the complete Pipeline:
-
-- **Future Goals**: Introduce advanced features such as multi-view consistency
+- **Baseline Model**: `sd-legacy/stable-diffusion-v1-5`
+- **Test Model**: `sudo-ai/zero123plus-v1.2`
+- **Network Architecture**: Kept basically consistent with `StableImageKeypoints v1.5`
+- **Comparison Dimensions**:
+  - Loss function convergence
+  - Attention mechanism activation patterns
+  - Keypoint extraction effectiveness
 
 ## Quick Start
 
@@ -53,15 +47,47 @@ Please refer to the environment configuration requirements of [StableImageKeypoi
 
    The remaining operation steps are consistent with the `StableImageKeypoints` project.
 
-## Results
+## Experimental Results
 
-![Example Results](assets/res.png)
+### Training Convergence Analysis
 
-![Convergence](assets/heat.png)
+![Loss Curve Convergence](assets/sk123.png)
 
-![Consistency](assets/augmentation.png)
+As shown in the figure, when training with `Zero123Plus` model weights, the loss function converges normally, initially indicating that the model has learning capability.
 
-We can observe that the generated results are similar to the `StableImageKeypoints v1.5` project.
+### Attention Mechanism Analysis
+
+![Attention Activation Pattern](assets/keypoint.png)
+
+However, through visualization analysis of the attention maps after the model is activated by `context`, we discovered a **critical issue**: the attention distribution exhibits a **divergent state**, failing to form the expected concentrated response pattern at keypoint locations.
+
+### Comparative Experiment Verification
+
+To rule out the influence of loading methods, we conducted the following comparative tests:
+
+1. **Full Zero123Plus Pipeline Loading**: Attention divergence ❌
+2. **Zero123Plus Weights Only (without Pipeline)**: Attention divergence ❌
+3. **Using stable-diffusion-v1-5 Weights (same architecture and configuration)**: Keypoint extraction normal ✅
+
+## Stage Conclusions
+
+### Core Findings
+
+**Without targeted code modifications, the Zero123Plus pre-trained weights cannot be directly applied to keypoint extraction tasks.**
+
+Although the loss function converges normally during model training, the model does not produce the expected response to pure context. Specifically:
+
+- ✅ **Training Feasibility**: Loss function convergence is normal
+- ❌ **Functional Effectiveness**: Attention mechanism not activated at keypoint locations
+- ✅ **Code Correctness**: `SD-1.5` weights work normally with the same code
+
+### Problem Attribution Analysis
+
+Considering the minimal structural differences between `Zero123Plus` and `Stable Diffusion v1.5`, we infer:
+
+**The special operations introduced during Zero123Plus pre-training (such as multi-view condition injection, reference image attention, etc.) have fundamentally changed how the model's internal weights process `encoder_hidden_states`.**
+
+This change is not a simple feature extraction difference, but involves deep reconstruction of the attention mechanism, making it difficult for the model to produce spatially localized responses to pure text `context` like the original SD model.
 
 > [!CAUTION]  
 > **Do not use FP16 precision**  
