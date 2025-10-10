@@ -49,7 +49,7 @@ class AttentionStore(AttentionControl):
         }
 
     def forward(self, dict, is_cross: bool, place_in_unet: str):
-        key = f"{place_in_unet}_{'cross' if is_cross else 'self'}"
+        # key = f"{place_in_unet}_{'cross' if is_cross else 'self'}"
         # if attn.shape[1] <= 32**2:  # avoid memory overhead
         self.step_store["attn"].append(dict['attn']) 
         
@@ -188,7 +188,7 @@ def find_pred_noise(
     pred_noise = ldm.unet(noisy_latent, 
                           timestep.repeat(noisy_latent.shape[0]), 
                           encoder_hidden_states=context.repeat(noisy_latent.shape[0], 1, 1),
-                        #   cross_attention_kwargs={"cond_lat": cond_lat}
+                          cross_attention_kwargs={"cond_lat": cond_lat}
                           )["sample"]
     
     return noise, pred_noise
@@ -270,7 +270,7 @@ def register_attention_control(model, controller, feature_upsample_res=128):
             attention_mask=None,
             temb=None,
             *args,
-            # mode="w", ref_dict: dict = None, is_cfg_guidance = False,
+            mode="w", ref_dict: dict = None, is_cfg_guidance = False,
             **kwargs,
         ):
             residual = hidden_states
@@ -321,7 +321,7 @@ def register_attention_control(model, controller, feature_upsample_res=128):
             attention_probs = F.softmax(attention_scores, dim=-1)
             
             if (
-                # mode != "w" and
+                mode != "w" and
                 is_cross and 
                 hidden_states.shape[1] <= 32**2 and 
                 len(self.controller.step_store["attn"]) < 3
@@ -435,8 +435,8 @@ def register_attention_control(model, controller, feature_upsample_res=128):
             cross_att_count += 1
         else:
             # processor.enable = False
-            # new_attn_procs[name] = processor
-            new_attn_procs[name] = AttnProcessor2_0()
+            new_attn_procs[name] = processor
+            # new_attn_procs[name] = AttnProcessor2_0()
             
     model.set_attn_processor(new_attn_procs)
     controller.num_att_layers = cross_att_count
